@@ -228,7 +228,7 @@ public class ChroniclePanel extends PluginPanel
 			Format.day(s.getStartedAt())));
 		stack.add(new CardPreview(cardImage));
 		stack.add(buttons);
-		String note = cardNote != null ? cardNote : "Saved cards go to your RuneLite screenshots folder, under Session Chronicle.";
+		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste.";
 		stack.add(Ui.wrapped(note, Theme.small(), cardNote != null ? Theme.TEAL : Theme.TEXT_FAINT, SessionView.WIDTH - 10));
 		replace(card, stack);
 	}

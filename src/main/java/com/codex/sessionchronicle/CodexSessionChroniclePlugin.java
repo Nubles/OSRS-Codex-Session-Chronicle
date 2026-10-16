@@ -19,8 +19,8 @@ import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -45,7 +45,6 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
-import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
@@ -66,6 +65,7 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.util.Text;
 import net.runelite.http.api.loottracker.LootRecordType;
 import org.slf4j.Logger;
@@ -557,27 +557,29 @@ public class CodexSessionChroniclePlugin extends Plugin
 		}
 	}
 
+	/** Asks where to save the card with RuneLite's own file chooser, then writes it there; runs on the Swing thread. */
 	private void saveCard(BufferedImage card, Summary session)
 	{
-		String player = session.getPlayer();
+		List<Filepath> chosen = new Filepath.Chooser()
+			.setIsSave()
+			.setAcceptsFiles()
+			.setDialogTitle("Save session card")
+			.addExtensionFilter("PNG image", "png")
+			.setDefaultExtension("png")
+			.setFileName("Session " + Format.file(session.getStartedAt()) + ".png")
+			.showDialog(panel);
+		if (chosen == null || chosen.isEmpty())
+		{
+			return;
+		}
+		Filepath target = chosen.get(0);
 		executor.execute(() ->
 		{
-			File folder = new File(RuneLite.SCREENSHOT_DIR, (player == null ? "" : player + File.separator) + "Session Chronicle");
-			String base = "Session " + Format.file(session.getStartedAt());
-			File file = new File(folder, base + ".png");
-			for (int i = 1; file.exists(); i++)
-			{
-				file = new File(folder, base + " (" + i + ").png");
-			}
 			String note;
-			try
+			try (OutputStream out = target.openOutputStream())
 			{
-				if (!folder.isDirectory() && !folder.mkdirs())
-				{
-					throw new IOException("Could not make " + folder);
-				}
-				ImageIO.write(card, "png", file);
-				note = "Saved as " + file.getName() + " in your RuneLite screenshots folder.";
+				ImageIO.write(card, "png", out);
+				note = "Saved as " + target.getFileName() + ".";
 			}
 			catch (IOException e)
 			{
@@ -585,10 +587,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 				note = "The card could not be saved: " + e.getMessage();
 			}
 			String shown = note;
-			ChroniclePanel target = panel;
-			if (target != null)
+			ChroniclePanel view = panel;
+			if (view != null)
 			{
-				SwingUtilities.invokeLater(() -> target.cardNote(shown));
+				SwingUtilities.invokeLater(() -> view.cardNote(shown));
 			}
 		});
 	}

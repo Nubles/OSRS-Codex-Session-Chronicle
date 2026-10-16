@@ -15,7 +15,7 @@ It is the fifth plugin in the **Codex** suite, after [Codex Navigator](https://g
 - **Session.** A clock that fills through each hour you play, then the session at a glance: a headline ("99 Ranged!", "24 Vorkath kills"), experience and loot with their hourly rates, levels gained and kills. Below that, every skill you trained with the levels it rose through, your loot laid out like bank slots, kills with the game's own kill count, and a timeline of the session's moments.
 - **Moments.** Level ups and 99s, pets, new collection log slots, drops worth more than a value you choose, quests, achievement diaries, combat tasks, clue scrolls, personal bests and deaths, each with the time it happened.
 - **Journal.** Every finished session, newest first, with your records (most experience, most loot), your hours this week, your streak of days played, and a chart of recent sessions by experience, loot or time. Click any session to open it again.
-- **Card.** The session as a picture: your name, the headline, totals, top skills, best loot, kills and highlights on a gilt-framed page, drawn at double scale so the pixel fonts stay crisp. Save it to your RuneLite screenshots folder or copy it straight to the clipboard.
+- **Card.** The session as a picture: your name, the headline, totals, top skills, best loot, kills and highlights on a gilt-framed page, drawn at double scale so the pixel fonts stay crisp. Save it wherever you choose with RuneLite's file chooser, or copy it straight to the clipboard.
 - **Ticker.** An optional slim plaque in the game view with the session's clock, experience and loot.
 
 <p align="center">
@@ -32,7 +32,7 @@ When a new session begins, a line in the chat box recaps the one before. Both th
 
 ## Rules posture
 
-Session Chronicle only reads what the game already shows you: your experience, loot events, and the game's own chat messages. It does not click, change menus or send anything over the network. Sessions are saved per account in your RuneLite profile, and cards are only written when you press Save.
+Session Chronicle only reads what the game already shows you: your experience, loot events, and the game's own chat messages. It does not click, change menus or send anything over the network. Sessions are saved per account in your RuneLite profile, and a card is only written when you press Save and pick where it goes.
 
 ## Development
 
