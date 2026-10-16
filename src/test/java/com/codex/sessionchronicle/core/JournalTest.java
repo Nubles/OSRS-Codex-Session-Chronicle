@@ -1,0 +1,80 @@
+package com.codex.sessionchronicle.core;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import org.junit.Test;
+
+public class JournalTest
+{
+	private static final long HOUR = 3_600_000L;
+	private static final long DAY = 24 * HOUR;
+
+	private static Session session(long start, long xp, long loot)
+	{
+		Session s = new Session(start, "Zezima");
+		Session.SkillLine line = new Session.SkillLine("Mining", 0, 1);
+		line.xp = xp;
+		s.skills.put("Mining", line);
+		if (loot > 0)
+		{
+			s.loot.put(995, new Session.Drop(995, "Coins", loot, 1));
+		}
+		s.playedMs = HOUR;
+		s.lastSeenAt = start + HOUR;
+		return s;
+	}
+
+	@Test
+	public void filesNewestFirstAndKeepsTheCap()
+	{
+		List<Session> journal = new ArrayList<>();
+		for (int i = 0; i < 5; i++)
+		{
+			journal = Journal.file(journal, session(i * DAY, 100, 0), 3);
+		}
+		assertEquals(3, journal.size());
+		assertEquals(4 * DAY, journal.get(0).getStartedAt());
+		assertEquals(2 * DAY, journal.get(2).getStartedAt());
+	}
+
+	@Test
+	public void compactingKeepsTheTotals()
+	{
+		Session s = session(0, 100, 0);
+		for (int id = 1; id <= Journal.KEEP_DROPS + 6; id++)
+		{
+			s.loot.put(id, new Session.Drop(id, "Item " + id, 1, id * 10L));
+		}
+		long value = s.lootValue();
+		Session c = Journal.compact(s);
+		assertEquals(Journal.KEEP_DROPS, c.loot.size());
+		assertEquals(6, c.otherDrops);
+		assertEquals(value, c.lootValue());
+		assertEquals(Journal.KEEP_DROPS + 6, Summary.of(c, Summary.State.ENDED).getDrops().size() + c.otherDrops);
+	}
+
+	@Test
+	public void recordsAndStreak()
+	{
+		long now = 10 * DAY + 12 * HOUR;
+		List<Session> journal = new ArrayList<>();
+		Session big = session(9 * DAY, 2_000_000, 100);
+		Session rich = session(8 * DAY, 10, 50_000_000);
+		journal.add(big);
+		journal.add(rich);
+		journal.add(session(5 * DAY, 10, 0));
+		Session today = session(10 * DAY, 5, 0);
+		Journal.Records r = Journal.records(journal, today, now, ZoneOffset.UTC);
+		assertSame(big, r.getMostXp());
+		assertSame(rich, r.getMostLoot());
+		assertEquals(3, r.getStreakDays());
+		assertEquals(4, r.getWeekSessions());
+
+		Journal.Records none = Journal.records(Collections.emptyList(), null, now, ZoneOffset.UTC);
+		assertEquals(0, none.getStreakDays());
+	}
+}

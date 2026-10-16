@@ -1,0 +1,296 @@
+package com.codex.sessionchronicle.core;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+/**
+ * Keeps the session that is being lived. It opens one when the player logs in, picks the same
+ * one back up if they return within the break allowance, and closes it once they have been away
+ * longer. Everything is fed in by the plugin with the time it happened, so it runs the same in
+ * tests as in the game. Not thread safe: the plugin only touches it on the client thread.
+ */
+public class Chronicle
+{
+	/** The longest gap between two ticks that still counts as play, so a frozen client does not. */
+	static final long MAX_TICK_GAP_MS = 5_000;
+	static final int MAX_MOMENTS = 200;
+
+	private Session current;
+	private boolean live;
+	private long lastTick;
+
+	public Session current()
+	{
+		return current;
+	}
+
+	public boolean isLive()
+	{
+		return live && current != null;
+	}
+
+	/** Puts back a session saved before the client closed; it waits paused until the player is seen. */
+	public void restore(Session saved)
+	{
+		current = saved;
+		live = false;
+	}
+
+	/**
+	 * The player is in the game. Continues the open session when it is theirs and they were away
+	 * for no longer than the gap, otherwise starts a new one.
+	 *
+	 * @return the session this closed, or null
+	 */
+	public Session begin(long now, String player, long gapMs)
+	{
+		Session closed = null;
+		if (current != null && (now - current.lastSeenAt > gapMs || !Objects.equals(player, current.player)))
+		{
+			closed = close();
+		}
+		if (current == null)
+		{
+			current = new Session(now, player);
+		}
+		live = true;
+		lastTick = now;
+		current.lastSeenAt = now;
+		return closed;
+	}
+
+	/** Counts play time; called every game tick while logged in. */
+	public void tick(long now)
+	{
+		if (!isLive())
+		{
+			return;
+		}
+		long gap = now - lastTick;
+		if (gap > 0)
+		{
+			current.playedMs += Math.min(gap, MAX_TICK_GAP_MS);
+		}
+		lastTick = now;
+		current.lastSeenAt = now;
+	}
+
+	/** The player left the game; the session stays open in case they come back. */
+	public void pause(long now)
+	{
+		tick(now);
+		live = false;
+	}
+
+	/** Closes the paused session once the player has been away for longer than the gap. */
+	public Session expire(long now, long gapMs)
+	{
+		if (current == null || live || now - current.lastSeenAt <= gapMs)
+		{
+			return null;
+		}
+		return close();
+	}
+
+	/** Ends the session now. Returns it, or null when nothing happened in it. */
+	public Session close()
+	{
+		Session session = current;
+		current = null;
+		live = false;
+		if (session == null)
+		{
+			return null;
+		}
+		session.endedAt = session.lastSeenAt;
+		return session.isEmpty() ? null : session;
+	}
+
+	/**
+	 * The player's experience in a skill. The first reading of a session is its starting point;
+	 * later readings are progress, and a higher level becomes a moment.
+	 */
+	public List<Moment> xp(String skill, long xp, int level, long now)
+	{
+		if (current == null || xp < 0)
+		{
+			return Collections.emptyList();
+		}
+		Session.SkillLine line = current.skills.get(skill);
+		if (line == null)
+		{
+			current.skills.put(skill, new Session.SkillLine(skill, xp, level));
+			return Collections.emptyList();
+		}
+		if (xp < line.xp)
+		{
+			// Experience never falls; a lower reading means the client was not ready yet.
+			return Collections.emptyList();
+		}
+		line.xp = xp;
+		List<Moment> moments = new ArrayList<>();
+		if (level > line.level)
+		{
+			int from = line.level;
+			line.level = level;
+			Moment m;
+			if (level == 99)
+			{
+				m = new Moment(Moment.Kind.MAX, now, "99 " + skill, "The highest level there is", 0, 0);
+			}
+			else
+			{
+				String detail = level - from > 1 ? "Up from " + from + ", " + (level - from) + " levels at once" : "Up from " + from;
+				m = new Moment(Moment.Kind.LEVEL, now, skill + " level " + level, detail, 0, 0);
+			}
+			add(m);
+			moments.add(m);
+		}
+		return moments;
+	}
+
+	/**
+	 * Loot from a kill, a raid, a chest or a clue.
+	 *
+	 * @param source what it came from, such as "Vorkath" or "Chambers of Xeric"
+	 * @param kills how many kills or clears it stands for; 0 for loot that is not a kill
+	 * @param valuable a single stack worth at least this becomes a moment
+	 * @return the moments the loot made
+	 */
+	public List<Moment> loot(String source, List<Session.Drop> drops, int kills, long valuable, long now)
+	{
+		if (current == null)
+		{
+			return Collections.emptyList();
+		}
+		if (kills > 0 && source != null && !source.isEmpty())
+		{
+			kill(source).looted += kills;
+		}
+		List<Moment> moments = new ArrayList<>();
+		for (Session.Drop drop : drops)
+		{
+			if (drop.quantity <= 0)
+			{
+				continue;
+			}
+			Session.Drop held = current.loot.get(drop.id);
+			if (held == null)
+			{
+				current.loot.put(drop.id, new Session.Drop(drop.id, drop.name, drop.quantity, drop.price));
+			}
+			else
+			{
+				held.quantity += drop.quantity;
+				if (drop.price > 0)
+				{
+					held.price = drop.price;
+				}
+			}
+			if (valuable > 0 && drop.value() >= valuable)
+			{
+				String name = drop.quantity > 1 ? drop.quantity + " x " + drop.getName() : drop.getName();
+				String from = source == null || source.isEmpty() ? "" : "From " + source + ", ";
+				Moment m = new Moment(Moment.Kind.DROP, now, name, from + "worth " + coins(drop.value()), drop.id, drop.value());
+				add(m);
+				moments.add(m);
+			}
+		}
+		return moments;
+	}
+
+	/** The game's own kill count after a kill. */
+	public void killCount(String name, int count)
+	{
+		if (current == null || count <= 0)
+		{
+			return;
+		}
+		Session.KillLine line = kill(name);
+		if (line.firstKc <= 0 || count < line.firstKc)
+		{
+			line.firstKc = count;
+		}
+		line.lastKc = Math.max(line.lastKc, count);
+	}
+
+	public void moment(Moment moment)
+	{
+		if (current != null)
+		{
+			add(moment);
+		}
+	}
+
+	public void death(long now, String where)
+	{
+		if (current == null)
+		{
+			return;
+		}
+		current.deaths++;
+		add(new Moment(Moment.Kind.DEATH, now, "Oh dear, you are dead", where, 0, 0));
+	}
+
+	private void add(Moment moment)
+	{
+		List<Moment> moments = current.moments;
+		moments.add(moment);
+		if (moments.size() > MAX_MOMENTS)
+		{
+			// Let the least telling moment go, never the newest.
+			int drop = 0;
+			for (int i = 1; i < moments.size() - 1; i++)
+			{
+				if (moments.get(i).rank() < moments.get(drop).rank())
+				{
+					drop = i;
+				}
+			}
+			moments.remove(drop);
+		}
+	}
+
+	private Session.KillLine kill(String name)
+	{
+		String key = key(name);
+		Session.KillLine line = current.kills.get(key);
+		if (line == null)
+		{
+			line = new Session.KillLine(name);
+			current.kills.put(key, line);
+		}
+		return line;
+	}
+
+	/** Loot and kill count messages name the same boss slightly differently; this folds them together. */
+	static String key(String name)
+	{
+		String key = name.toLowerCase(Locale.ROOT).trim();
+		if (key.endsWith(" chest"))
+		{
+			key = key.substring(0, key.length() - 6);
+		}
+		return key;
+	}
+
+	static String coins(long gp)
+	{
+		if (gp >= 1_000_000_000)
+		{
+			return String.format(Locale.ROOT, "%.2fB", gp / 1e9);
+		}
+		if (gp >= 1_000_000)
+		{
+			return String.format(Locale.ROOT, "%.1fM", gp / 1e6);
+		}
+		if (gp >= 1_000)
+		{
+			return Math.round(gp / 1e3) + "k";
+		}
+		return gp + " coins";
+	}
+}

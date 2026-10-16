@@ -1,0 +1,168 @@
+package com.codex.sessionchronicle.core;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import org.junit.Test;
+
+public class ChronicleTest
+{
+	private static final long MIN = 60_000;
+	private static final long GAP = 15 * MIN;
+
+	@Test
+	public void countsExperienceFromTheFirstReading()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Slayer", 1_000_000, 80, 0);
+		c.xp("Slayer", 1_050_000, 80, 1000);
+		assertEquals(50_000, c.current().totalXp());
+		// A lower reading is the client catching up, never lost experience.
+		c.xp("Slayer", 10, 1, 2000);
+		assertEquals(50_000, c.current().totalXp());
+	}
+
+	@Test
+	public void levelsBecomeMoments()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Slayer", 1_000_000, 80, 0);
+		List<Moment> up = c.xp("Slayer", 1_100_000, 81, 10);
+		assertEquals(1, up.size());
+		assertEquals("Slayer level 81", up.get(0).getTitle());
+		up = c.xp("Slayer", 13_034_431, 99, 20);
+		assertEquals(Moment.Kind.MAX, up.get(0).getKind());
+		assertEquals(19, c.current().levelsGained());
+	}
+
+	@Test
+	public void resumesWithinTheBreakAndStartsAfresh()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Attack", 100, 1, 0);
+		c.xp("Attack", 500, 5, 1);
+		Session first = c.current();
+		c.tick(4000);
+		c.pause(8000);
+		assertNull(c.begin(8000 + 10 * MIN, "Zezima", GAP));
+		assertSame(first, c.current());
+
+		c.pause(8000 + 11 * MIN);
+		assertNull(c.expire(8000 + 20 * MIN, GAP));
+		Session closed = c.expire(8000 + 30 * MIN, GAP);
+		assertSame(first, closed);
+		assertEquals(first.getLastSeenAt(), closed.getEndedAt());
+		assertNull(c.current());
+	}
+
+	@Test
+	public void anotherCharacterStartsANewSession()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.loot("Cow", Collections.singletonList(new Session.Drop(526, "Bones", 1, 100)), 1, 0, 0);
+		c.pause(MIN);
+		Session closed = c.begin(2 * MIN, "Lynx Titan", GAP);
+		assertNotNull(closed);
+		assertEquals("Lynx Titan", c.current().getPlayer());
+	}
+
+	@Test
+	public void playTimeIgnoresFrozenClients()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.tick(600);
+		c.tick(1200);
+		c.tick(60_000);
+		assertEquals(1200 + Chronicle.MAX_TICK_GAP_MS, c.current().getPlayedMs());
+	}
+
+	@Test
+	public void emptySessionsAreNotKept()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.tick(600);
+		assertNull(c.close());
+	}
+
+	@Test
+	public void lootStacksAndValuableDropsStandOut()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		List<Moment> m = c.loot("Vorkath", Arrays.asList(
+			new Session.Drop(536, "Dragon bones", 2, 2_500),
+			new Session.Drop(11286, "Draconic visage", 1, 4_200_000)), 1, 500_000, 5);
+		c.loot("Vorkath", Collections.singletonList(new Session.Drop(536, "Dragon bones", 2, 2_600)), 1, 500_000, 10);
+		assertEquals(1, m.size());
+		assertEquals("Draconic visage", m.get(0).getTitle());
+		assertEquals(4, c.current().loot.get(536).getQuantity());
+		assertEquals(4 * 2_600 + 4_200_000, c.current().lootValue());
+		assertEquals(2, c.current().totalKills());
+	}
+
+	@Test
+	public void killCountsAndLootAgreeOnKills()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		for (int kc = 100; kc <= 104; kc++)
+		{
+			c.loot("Vorkath", Collections.emptyList(), 1, 0, kc);
+			c.killCount("Vorkath", kc);
+		}
+		c.killCount("Barrows chest", 50);
+		c.loot("Barrows", Collections.emptyList(), 1, 0, 0);
+		c.killCount("Barrows chest", 51);
+		Summary s = Summary.of(c.current(), Summary.State.LIVE);
+		assertEquals(2, s.getKillLines().size());
+		assertEquals(5, s.getKillLines().get(0).count());
+		assertEquals(104, s.getKillLines().get(0).getKillCount());
+		assertEquals(2, s.getKillLines().get(1).count());
+		assertEquals("5 Vorkath kills", s.headline());
+	}
+
+	@Test
+	public void petsLeadTheHeadline()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Slayer", 1_000_000, 80, 0);
+		c.xp("Slayer", 1_200_000, 82, 0);
+		assertEquals("2 Slayer levels", Summary.of(c.current(), Summary.State.LIVE).headline());
+		c.moment(ChatParser.moment("You have a funny feeling like you're being followed.", 5, null));
+		Summary s = Summary.of(c.current(), Summary.State.LIVE);
+		assertEquals("A pet followed you home", s.headline());
+		assertEquals(Moment.Kind.PET, s.getHighlights().get(0).getKind());
+		assertTrue(s.getMoments().get(0).getAt() <= s.getMoments().get(s.getMoments().size() - 1).getAt());
+	}
+
+	@Test
+	public void ratesWaitForEnoughTime()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Mining", 0, 1, 0);
+		c.xp("Mining", 10_000, 30, 0);
+		for (long t = 600; t <= 2 * MIN; t += 600)
+		{
+			c.tick(t);
+		}
+		assertEquals(0, Summary.of(c.current(), Summary.State.LIVE).xpPerHour());
+		for (long t = 2 * MIN; t <= 30 * MIN; t += 600)
+		{
+			c.tick(t);
+		}
+		assertEquals(20_000, Summary.of(c.current(), Summary.State.LIVE).xpPerHour(), 100);
+	}
+}
