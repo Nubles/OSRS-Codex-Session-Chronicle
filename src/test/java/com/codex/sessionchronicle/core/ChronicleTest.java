@@ -205,9 +205,14 @@ public class ChronicleTest
 		assertEquals(2, c.current().moments.size());
 		assertEquals(20997, c.current().moments.get(1).getItemId());
 
+		// A 99 still leads the highlights over even the richest new slot.
+		c.xp("Ranged", 13_000_000, 98, 0);
+		c.xp("Ranged", 13_034_431, 99, 62_000);
+		assertEquals(Moment.Kind.MAX, Summary.of(c.current(), Summary.State.LIVE).getHighlights().get(0).getKind());
+
 		// Long after, the same name is a new moment.
 		c.moment(ChatParser.moment("New item added to your collection log: Draconic visage", 60 * MIN, null));
-		assertEquals(3, c.current().moments.size());
+		assertEquals(4, c.current().moments.size());
 	}
 
 	@Test

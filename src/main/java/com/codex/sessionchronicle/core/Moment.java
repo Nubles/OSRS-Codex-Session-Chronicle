@@ -6,8 +6,8 @@ public class Moment
 	/** What kind of moment it is; the order is how much it matters on a card. */
 	public enum Kind
 	{
-		PET(100),
-		MAX(90),
+		PET(120),
+		MAX(100),
 		COLLECTION(80),
 		DROP(70),
 		QUEST(60),
