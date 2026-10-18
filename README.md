@@ -12,9 +12,9 @@ It is the fifth plugin in the **Codex** suite, after [Codex Navigator](https://g
 
 ## What it does
 
-- **Session.** A clock that fills through each hour you play, then the session at a glance: a headline ("99 Ranged!", "24 Vorkath kills"), experience and loot with their hourly rates, levels gained and kills. Below that, every skill you trained with the levels it rose through, your loot laid out like bank slots, kills with the game's own kill count, and a timeline of the session's moments.
-- **Moments.** Level ups and 99s, pets, new collection log slots, drops worth more than a value you choose, quests, achievement diaries, combat tasks, clue scrolls, personal bests and deaths, each with the time it happened.
-- **Journal.** Every finished session, newest first, with your records (most experience, most loot), your hours this week, your streak of days played, and a chart of recent sessions by experience, loot or time. Click any session to open it again.
+- **Session.** A clock that fills through each hour you play, then the session at a glance: a headline ("99 Ranged!", "Draconic visage!", "24 Vorkath kills", "Mining at 192k/hr"), experience and loot with their hourly rates, levels gained and kills. Below that, every skill you trained with the levels it rose through, your loot laid out like bank slots, kills with the game's own kill count, and a timeline of the session's moments. Changing activity? **End session** files it in the journal and starts a fresh one straight away.
+- **Moments.** Level ups and 99s, pets, new collection log slots, drops worth more than a value you choose, quests, achievement diaries, combat tasks, clue scrolls, personal bests and deaths (with what killed you), each with the time it happened. A big drop that is also a new log slot is one moment, not two.
+- **Journal.** Every finished session, newest first, with your records (most experience, most loot), your hours this week, your streak of days played, and a chart of recent sessions by experience, loot or time. Click any session to open it again, and **Remove** one you would rather not keep.
 - **Card.** The session as a picture: your name, the headline, totals, top skills, best loot, kills and highlights on a gilt-framed page, drawn at double scale so the pixel fonts stay crisp. Save it wherever you choose with RuneLite's file chooser, or copy it straight to the clipboard.
 - **Ticker.** An optional slim plaque in the game view with the session's clock, experience and loot.
 
@@ -24,15 +24,15 @@ It is the fifth plugin in the **Codex** suite, after [Codex Navigator](https://g
 
 ## How sessions work
 
-A session begins when you log in. If you log out and come back within the break allowance (15 minutes by default), the same session carries on; stay away longer and it is filed in the journal, and the next login begins a new one. World hops never end a session. Play time only counts while you are logged in.
+A session begins when you log in. If you log out and come back within the break allowance (15 minutes by default), the same session carries on; stay away longer and it is filed in the journal, and the next login begins a new one. World hops never end a session. Play time only counts while you are logged in, and so does experience: anything you gain on another device during a break is left out, so the rates stay honest.
 
-Experience is measured from your first reading of each skill in the session. Loot comes from RuneLite's own loot events, so kills, raids, chests and clues are all counted, each item priced at the Grand Exchange price when it dropped. Kills are counted from loot and from the game's kill count messages, whichever saw more.
+Experience is measured from your first reading of each skill in the session. Last Man Standing and the PvP Arena lend you stats for a while; those never count as progress. Loot comes from RuneLite's loot events, each item priced at the Grand Exchange price when it dropped. Monster kills are always seen; raids, chests and clue caskets come from RuneLite's Loot Tracker plugin, so keep it switched on to have them counted. Kills are counted from loot and from the game's kill count messages, whichever saw more, and the two are matched even when they spell a boss differently.
 
 When a new session begins, a line in the chat box recaps the one before. Both that and the ticker can be turned off in the settings, and the card can leave your name off.
 
 ## Rules posture
 
-Session Chronicle only reads what the game already shows you: your experience, loot events, and the game's own chat messages. It does not click, change menus or send anything over the network. Sessions are saved per account in your RuneLite profile, and a card is only written when you press Save and pick where it goes.
+Session Chronicle only reads what the game already shows you: your experience, loot events, and the game's own chat messages. It does not click, change menus or send anything over the network. Sessions are saved per account in your RuneLite profile (also as the client closes), and a card is only written when you press Save and pick where it goes.
 
 ## Development
 

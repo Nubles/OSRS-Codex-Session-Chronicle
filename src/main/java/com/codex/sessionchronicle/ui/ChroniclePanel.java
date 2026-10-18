@@ -124,17 +124,13 @@ public class ChroniclePanel extends PluginPanel
 		this.past = past;
 		this.records = records;
 		this.playerName = playerName;
-		if (journalChanged)
-		{
-			stale = true;
-		}
 		if (!isShowing())
 		{
 			// Nothing is drawn while the panel is closed; it catches up when it opens.
 			stale = true;
 			return;
 		}
-		refresh(journalChanged);
+		refresh(journalChanged || stale);
 	}
 
 	@Override
