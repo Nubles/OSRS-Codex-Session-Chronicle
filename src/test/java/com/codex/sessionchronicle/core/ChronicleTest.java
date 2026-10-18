@@ -282,4 +282,19 @@ public class ChronicleTest
 		assertTrue(!before.equals(Summary.signature(Summary.of(c.current(), Summary.State.LIVE))));
 		assertEquals("none", Summary.signature(null));
 	}
+
+	@Test
+	public void countsSayWhatTheyCount()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.loot("Clue Scroll (Medium)", Collections.emptyList(), 12, 0, 0);
+		c.loot("Chambers of Xeric", Collections.emptyList(), 1, 0, 0);
+		c.killCount("Chambers of Xeric", 40);
+		c.killCount("Chambers of Xeric", 42);
+		List<Session.KillLine> lines = Summary.of(c.current(), Summary.State.LIVE).getKillLines();
+		assertEquals("12 medium clues", Summary.kills(lines.get(0)));
+		assertEquals("3 Chambers of Xeric clears", Summary.kills(lines.get(1)));
+		assertEquals("3 Chambers of Xeric clears", Summary.of(c.current(), Summary.State.LIVE).headline());
+	}
 }

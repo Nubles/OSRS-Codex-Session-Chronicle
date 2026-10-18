@@ -105,18 +105,35 @@ public final class ShareCard
 		g.drawString(date, x + w - small.stringWidth(date), y + small.getAscent() - 1);
 		y += small.getHeight() + 8;
 
-		if (showName && s.getPlayer() != null)
+		boolean named = showName && s.getPlayer() != null;
+		String headline = s.headline();
+		// The name heads the card; without it the headline takes its place, as large as fits.
+		String big = named ? s.getPlayer() : headline;
+		Font font = Theme.title();
+		for (float scale : new float[]{2f, 1.5f})
 		{
-			Font big = Theme.title().deriveFont(Theme.title().getSize2D() * 2);
-			g.setFont(big);
-			FontMetrics fm = g.getFontMetrics();
-			Ui.shadowed(g, Ui.clip(s.getPlayer(), fm, w), x, y + fm.getAscent() - 4, Theme.GOLD_BRIGHT);
-			y += fm.getAscent() - 2;
+			Font scaled = Theme.title().deriveFont(Theme.title().getSize2D() * scale);
+			if (named || g.getFontMetrics(scaled).stringWidth(big) <= w)
+			{
+				font = scaled;
+				break;
+			}
 		}
+		g.setFont(font);
+		FontMetrics large = g.getFontMetrics();
+		Ui.shadowed(g, Ui.clip(big, large, w), x, y + large.getAscent() - 4, Theme.GOLD_BRIGHT);
+		y += large.getAscent() - 2;
 		g.setFont(Theme.title());
 		FontMetrics bold = g.getFontMetrics();
-		Ui.shadowed(g, Ui.clip(s.headline(), bold, w), x, y + bold.getAscent(), showName ? Theme.TEXT : Theme.GOLD_BRIGHT);
-		y += bold.getHeight();
+		if (named)
+		{
+			Ui.shadowed(g, Ui.clip(headline, bold, w), x, y + bold.getAscent(), Theme.TEXT);
+			y += bold.getHeight();
+		}
+		else
+		{
+			y += 4;
+		}
 		g.setFont(Theme.small());
 		String when = Format.duration(s.getPlayedMs()) + " played, " + Format.time(s.getStartedAt()) + " to " + Format.time(s.getEndedAt());
 		g.setColor(Theme.TEXT_MUTED);
@@ -193,8 +210,9 @@ public final class ShareCard
 			header(g, "Kills", null, x, y, w);
 			y += 24;
 			int top = kills.get(0).count();
-			int colW = (w - 16) / 2;
 			int shown = Math.min(KILLS, kills.size());
+			// One line of kills spans the page, so its count sits at the edge like the skills above.
+			int colW = shown == 1 ? w : (w - 16) / 2;
 			for (int i = 0; i < shown; i++)
 			{
 				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % 2) * (colW + 16), y + (i / 2) * 20, colW);

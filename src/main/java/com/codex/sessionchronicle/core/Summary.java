@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A read-only telling of one session, ready for the panel and the card: totals, rates, the
@@ -13,6 +16,10 @@ public final class Summary
 {
 	/** Rates are only shown once a session is long enough for them to mean something. */
 	static final long MIN_RATE_MS = 5 * 60_000L;
+	private static final Pattern CLUE = Pattern.compile("(?i)clue scroll \\((\\w+)\\)");
+	/** Raids and other runs that are finished rather than killed. */
+	private static final String[] CLEARS = {"chambers of xeric", "theatre of blood", "tombs of amascut", "gauntlet", "corrupted gauntlet",
+		"fortis colosseum", "tzhaar-ket-rak", "hallowed sepulchre"};
 
 	public enum State
 	{
@@ -283,8 +290,24 @@ public final class Summary
 		return "A quiet session";
 	}
 
-	private static String kills(Session.KillLine line)
+	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */
+	static String kills(Session.KillLine line)
 	{
-		return line.count() + " " + line.getName() + (line.count() == 1 ? " kill" : " kills");
+		int n = line.count();
+		String name = line.getName();
+		Matcher clue = CLUE.matcher(name);
+		if (clue.matches())
+		{
+			return n + " " + clue.group(1).toLowerCase(Locale.ROOT) + (n == 1 ? " clue" : " clues");
+		}
+		String key = Chronicle.key(name);
+		for (String raid : CLEARS)
+		{
+			if (key.startsWith(raid))
+			{
+				return n + " " + name + (n == 1 ? " clear" : " clears");
+			}
+		}
+		return n + " " + name + (n == 1 ? " kill" : " kills");
 	}
 }
