@@ -93,6 +93,17 @@ public final class Summary
 		return new Summary(session, state);
 	}
 
+	/** A short fingerprint of everything the panel draws, to tell when a summary has really changed. */
+	public static String signature(Summary s)
+	{
+		if (s == null)
+		{
+			return "none";
+		}
+		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
+			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player;
+	}
+
 	public State getState()
 	{
 		return state;
@@ -194,10 +205,14 @@ public final class Summary
 		return playedMs < MIN_RATE_MS ? 0 : Math.round(value * 3_600_000.0 / playedMs);
 	}
 
-	/** One line that says what the session was about. */
+	/**
+	 * One line that says what the session was about, the rarest thing first: a pet, a 99, a new
+	 * collection log slot, a boss trip, a run of levels, a slayer grind, then the main skill.
+	 */
 	public String headline()
 	{
 		Moment max = null;
+		List<Moment> logged = new ArrayList<>();
 		for (Moment m : highlights)
 		{
 			if (m.getKind() == Moment.Kind.PET)
@@ -208,10 +223,22 @@ public final class Summary
 			{
 				max = m;
 			}
+			if (m.getKind() == Moment.Kind.COLLECTION)
+			{
+				logged.add(m);
+			}
 		}
 		if (max != null)
 		{
 			return max.getTitle() + "!";
+		}
+		if (logged.size() == 1)
+		{
+			return logged.get(0).getTitle() + "!";
+		}
+		if (logged.size() > 1)
+		{
+			return logged.size() + " new collection log slots";
 		}
 		Session.KillLine boss = null;
 		for (Session.KillLine line : killLines)
@@ -222,29 +249,42 @@ public final class Summary
 				break;
 			}
 		}
-		Session.SkillLine top = skills.isEmpty() ? null : skills.get(0);
 		if (boss != null && boss.count() >= 3)
 		{
-			return boss.count() + " " + boss.getName() + (boss.count() == 1 ? " kill" : " kills");
+			return kills(boss);
+		}
+		Session.SkillLine top = skills.isEmpty() ? null : skills.get(0);
+		int gained = top == null ? 0 : top.getLevel() - top.getStartLevel();
+		if (gained >= 2)
+		{
+			return gained + " " + top.getSkill() + " levels";
+		}
+		if (!killLines.isEmpty() && killLines.get(0).count() >= 10)
+		{
+			return kills(killLines.get(0));
 		}
 		if (top != null)
 		{
-			int gained = top.getLevel() - top.getStartLevel();
-			if (gained >= 2)
+			if (gained == 1)
 			{
-				return gained + " " + top.getSkill() + " levels";
+				return top.getSkill() + " level " + top.getLevel();
 			}
-			return "A " + top.getSkill() + " session";
+			long rate = perHour(top.gained());
+			return rate > 0 ? top.getSkill() + " at " + Chronicle.amount(rate) + "/hr" : "+" + Chronicle.amount(top.gained()) + " " + top.getSkill() + " xp";
 		}
 		if (!killLines.isEmpty())
 		{
-			Session.KillLine first = killLines.get(0);
-			return first.count() + " " + first.getName() + (first.count() == 1 ? " kill" : " kills");
+			return kills(killLines.get(0));
 		}
 		if (lootValue > 0)
 		{
 			return "A haul worth " + Chronicle.coins(lootValue);
 		}
 		return "A quiet session";
+	}
+
+	private static String kills(Session.KillLine line)
+	{
+		return line.count() + " " + line.getName() + (line.count() == 1 ? " kill" : " kills");
 	}
 }

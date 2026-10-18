@@ -165,4 +165,121 @@ public class ChronicleTest
 		}
 		assertEquals(20_000, Summary.of(c.current(), Summary.State.LIVE).xpPerHour(), 100);
 	}
+
+	@Test
+	public void bossNamesFoldTogether()
+	{
+		assertEquals(Chronicle.key("Nightmare"), Chronicle.key("The Nightmare"));
+		assertEquals(Chronicle.key("Tombs of Amascut"), Chronicle.key("Tombs of Amascut: Expert Mode"));
+		assertEquals(Chronicle.key("Theatre of Blood"), Chronicle.key("Theatre of Blood: Hard Mode"));
+		assertEquals(Chronicle.key("Grotesque Guardians"), Chronicle.key("Dusk"));
+		assertEquals(Chronicle.key("Corrupted Gauntlet"), Chronicle.key("The Corrupted Gauntlet"));
+		assertEquals(Chronicle.key("Barrows"), Chronicle.key("Barrows chest"));
+
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		for (int kc = 10; kc <= 12; kc++)
+		{
+			c.loot("Dusk", Collections.emptyList(), 1, 0, kc);
+			c.killCount("Grotesque Guardians", kc);
+		}
+		assertEquals(3, c.current().totalKills());
+	}
+
+	@Test
+	public void aLogSlotAndItsDropAreOneMoment()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.loot("Vorkath", Collections.singletonList(new Session.Drop(11286, "Draconic visage", 1, 4_200_000)), 1, 500_000, 1000);
+		c.moment(ChatParser.moment("New item added to your collection log: Draconic visage", 30_000, null));
+		assertEquals(1, c.current().moments.size());
+		Moment m = c.current().moments.get(0);
+		assertEquals(Moment.Kind.COLLECTION, m.getKind());
+		assertEquals(11286, m.getItemId());
+		assertEquals("New log slot, Vorkath, 4.2M", m.getDetail());
+
+		// A raid announces the slot before the chest's loot arrives.
+		c.moment(ChatParser.moment("New item added to your collection log: Twisted bow", 60_000, null));
+		c.loot("Chambers of Xeric", Collections.singletonList(new Session.Drop(20997, "Twisted bow", 1, 1_500_000_000)), 1, 500_000, 61_000);
+		assertEquals(2, c.current().moments.size());
+		assertEquals(20997, c.current().moments.get(1).getItemId());
+
+		// Long after, the same name is a new moment.
+		c.moment(ChatParser.moment("New item added to your collection log: Draconic visage", 60 * MIN, null));
+		assertEquals(3, c.current().moments.size());
+	}
+
+	@Test
+	public void experienceGainedAwayIsNotThisSessions()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Fishing", 1_000_000, 80, 0);
+		c.xp("Fishing", 1_100_000, 81, 1000);
+		c.pause(MIN);
+		c.begin(5 * MIN, "Zezima", GAP);
+		// Fished on mobile during the break: 50k more and a level.
+		c.resume("Fishing", 1_150_000, 82);
+		c.resume("Mining", 0, 1);
+		Session.SkillLine line = c.current().skills.get("Fishing");
+		assertEquals(100_000, line.gained());
+		assertEquals(1, line.getLevel() - line.getStartLevel());
+		c.xp("Fishing", 1_160_000, 82, 6 * MIN);
+		assertEquals(110_000, c.current().totalXp());
+		// A reading the client was not ready for changes nothing.
+		c.resume("Fishing", 0, 1);
+		assertEquals(110_000, c.current().totalXp());
+	}
+
+	@Test
+	public void deathsNameTheKiller()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.death(5, "Vorkath");
+		c.death(6, null);
+		assertEquals(2, c.current().getDeaths());
+		assertEquals("Killed by Vorkath", c.current().moments.get(0).getDetail());
+		assertEquals("Back to the respawn point", c.current().moments.get(1).getDetail());
+	}
+
+	@Test
+	public void headlinesTellTheSession()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Mining", 1_000_000, 80, 0);
+		c.xp("Mining", 1_050_000, 80, 0);
+		assertEquals("+50k Mining xp", Summary.of(c.current(), Summary.State.LIVE).headline());
+		for (long t = 600; t <= 30 * MIN; t += 600)
+		{
+			c.tick(t);
+		}
+		assertEquals("Mining at 100k/hr", Summary.of(c.current(), Summary.State.LIVE).headline());
+		c.xp("Mining", 1_100_000, 81, 0);
+		assertEquals("Mining level 81", Summary.of(c.current(), Summary.State.LIVE).headline());
+		for (int i = 0; i < 12; i++)
+		{
+			c.loot("Abyssal demon", Collections.emptyList(), 1, 0, 0);
+		}
+		assertEquals("12 Abyssal demon kills", Summary.of(c.current(), Summary.State.LIVE).headline());
+		c.moment(ChatParser.moment("New item added to your collection log: Abyssal whip", 1, null));
+		assertEquals("Abyssal whip!", Summary.of(c.current(), Summary.State.LIVE).headline());
+		c.moment(ChatParser.moment("New item added to your collection log: Abyssal head", 2, null));
+		assertEquals("2 new collection log slots", Summary.of(c.current(), Summary.State.LIVE).headline());
+	}
+
+	@Test
+	public void signatureFollowsWhatIsShown()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Mining", 1_000_000, 80, 0);
+		String before = Summary.signature(Summary.of(c.current(), Summary.State.LIVE));
+		assertEquals(before, Summary.signature(Summary.of(c.current(), Summary.State.LIVE)));
+		c.xp("Mining", 1_000_050, 80, 0);
+		assertTrue(!before.equals(Summary.signature(Summary.of(c.current(), Summary.State.LIVE))));
+		assertEquals("none", Summary.signature(null));
+	}
 }

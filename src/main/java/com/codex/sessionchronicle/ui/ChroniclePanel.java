@@ -30,6 +30,7 @@ public class ChroniclePanel extends PluginPanel
 	private final ItemIcons items;
 	private final Icons icons;
 	private final CardActions actions;
+	private final SessionActions sessionActions;
 	private final Crest crest = new Crest();
 	private final Segmented tabs = new Segmented(true, "Session", "Journal", "Card");
 	private final Segmented metrics = new Segmented(false, JournalView.METRICS);
@@ -48,13 +49,19 @@ public class ChroniclePanel extends PluginPanel
 	private int tab;
 	private String cardNote;
 	private BufferedImage cardImage;
+	/** Set when data arrived while the panel was closed; it is drawn once the panel opens. */
+	private boolean stale;
+	/** What the Session and Card tabs last drew, so an unchanged session is not built again. */
+	private String sessionDrawn;
+	private String cardDrawn;
 
-	public ChroniclePanel(ItemIcons items, Icons icons, CardActions actions)
+	public ChroniclePanel(ItemIcons items, Icons icons, CardActions actions, SessionActions sessionActions)
 	{
 		super(false);
 		this.items = items;
 		this.icons = icons;
 		this.actions = actions;
+		this.sessionActions = sessionActions;
 		setLayout(new BorderLayout());
 		setBackground(Theme.INK);
 
@@ -117,10 +124,35 @@ public class ChroniclePanel extends PluginPanel
 		this.past = past;
 		this.records = records;
 		this.playerName = playerName;
+		if (journalChanged)
+		{
+			stale = true;
+		}
+		if (!isShowing())
+		{
+			// Nothing is drawn while the panel is closed; it catches up when it opens.
+			stale = true;
+			return;
+		}
+		refresh(journalChanged);
+	}
+
+	@Override
+	public void onActivate()
+	{
+		if (stale)
+		{
+			refresh(true);
+		}
+	}
+
+	private void refresh(boolean journalChanged)
+	{
+		stale = false;
 		crest.update(shown(), playerName);
 		if (open < 0)
 		{
-			replace(session, SessionView.build(live, items, icons, null));
+			rebuildSession(false);
 		}
 		if (journalChanged)
 		{
@@ -128,7 +160,30 @@ public class ChroniclePanel extends PluginPanel
 		}
 		if (tab == 2)
 		{
-			rebuildCard();
+			rebuildCard(false);
+		}
+	}
+
+	/** Builds the Session tab again, unless what it shows has not changed. */
+	private void rebuildSession(boolean force)
+	{
+		Summary s = shown();
+		String drawn = (open >= 0 ? "past:" : "live:") + Summary.signature(s);
+		if (!force && drawn.equals(sessionDrawn))
+		{
+			return;
+		}
+		sessionDrawn = drawn;
+		replace(session, open >= 0 ? SessionView.build(s, items, icons, this::backToLive, this::removeOpen, null)
+			: SessionView.build(s, items, icons, null, null, sessionActions::endSession));
+	}
+
+	private void removeOpen()
+	{
+		if (open >= 0 && open < past.size())
+		{
+			sessionActions.removeSession(past.get(open).getStartedAt());
+			backToLive();
 		}
 	}
 
@@ -137,7 +192,7 @@ public class ChroniclePanel extends PluginPanel
 		this.showName = showName;
 		if (tab == 2)
 		{
-			rebuildCard();
+			rebuildCard(true);
 		}
 	}
 
@@ -145,7 +200,7 @@ public class ChroniclePanel extends PluginPanel
 	public void cardNote(String note)
 	{
 		cardNote = note;
-		rebuildCard();
+		rebuildCard(true);
 	}
 
 	/** Opens one tab, for previews and tests. */
@@ -157,7 +212,7 @@ public class ChroniclePanel extends PluginPanel
 		if (index == 2)
 		{
 			cardNote = null;
-			rebuildCard();
+			rebuildCard(true);
 		}
 	}
 
@@ -170,7 +225,7 @@ public class ChroniclePanel extends PluginPanel
 		}
 		open = index;
 		crest.update(shown(), playerName);
-		replace(session, SessionView.build(past.get(index), items, icons, this::backToLive));
+		rebuildSession(true);
 		showTab(0);
 		SwingUtilities.invokeLater(() -> session.getVerticalScrollBar().setValue(0));
 	}
@@ -179,7 +234,7 @@ public class ChroniclePanel extends PluginPanel
 	{
 		open = -1;
 		crest.update(shown(), playerName);
-		replace(session, SessionView.build(live, items, icons, null));
+		rebuildSession(true);
 	}
 
 	private Summary shown()
@@ -190,7 +245,7 @@ public class ChroniclePanel extends PluginPanel
 	private void rebuild()
 	{
 		crest.update(shown(), playerName);
-		replace(session, SessionView.build(live, items, icons, null));
+		rebuildSession(true);
 		rebuildJournal();
 	}
 
@@ -204,13 +259,22 @@ public class ChroniclePanel extends PluginPanel
 		replace(journal, JournalView.build(past, records, metrics, this::openPast));
 	}
 
-	private void rebuildCard()
+	private void rebuildCard(boolean force)
 	{
 		Summary s = shown();
 		if (s == null && !past.isEmpty())
 		{
 			s = past.get(0);
 		}
+		// The card is a large picture; only paint it again when the session on it has moved on.
+		String drawn = s == null ? "none" : showName + "/" + s.getState() + "/" + s.getStartedAt() + "/" + s.getPlayedMs() / 60_000
+			+ "/" + Format.xp(s.getTotalXp()) + "/" + Format.coins(s.getLootValue()) + "/" + s.getKills() + "/" + s.getLevels()
+			+ "/" + s.getMoments().size() + "/" + s.getDrops().size() + "/" + s.getDeaths() + "/" + open;
+		if (!force && drawn.equals(cardDrawn))
+		{
+			return;
+		}
+		cardDrawn = drawn;
 		StackPanel stack = new StackPanel(8, 8);
 		if (s == null)
 		{
@@ -246,7 +310,7 @@ public class ChroniclePanel extends PluginPanel
 		SwingUtilities.invokeLater(() ->
 		{
 			refreshPending = false;
-			rebuildCard();
+			rebuildCard(true);
 		});
 	}
 

@@ -104,6 +104,12 @@ public final class Format
 		return DAY.format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()));
 	}
 
+	/** "16", the day of the month, for a chart's labels. */
+	public static String dayOfMonth(long epochMs)
+	{
+		return String.valueOf(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).getDayOfMonth());
+	}
+
 	/** "Thursday 16 October 2026". */
 	public static String date(long epochMs)
 	{

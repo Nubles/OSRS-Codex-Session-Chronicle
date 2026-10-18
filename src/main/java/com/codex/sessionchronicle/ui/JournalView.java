@@ -5,6 +5,7 @@ import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.function.IntConsumer;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.border.EmptyBorder;
 
 /** The Journal tab: records, a chart of recent sessions and every session kept, newest first. */
 final class JournalView
@@ -35,7 +37,8 @@ final class JournalView
 		tiles.add(new StatTile(Format.duration(records.getWeekPlayedMs()).replace("under a minute", "0m"), "This week",
 			records.getWeekSessions() + (records.getWeekSessions() == 1 ? " session" : " sessions"), Theme.TEAL));
 		int streak = records.getStreakDays();
-		tiles.add(new StatTile(streak + (streak == 1 ? " day" : " days"), "Streak", streak > 1 ? "in a row" : "play again tomorrow", Theme.EMBER));
+		tiles.add(new StatTile(streak == 0 ? "-" : streak + (streak == 1 ? " day" : " days"), "Streak",
+			streak > 1 ? "in a row" : streak == 1 ? "play tomorrow too" : "no play yesterday", Theme.EMBER));
 		Session xp = records.getMostXp();
 		tiles.add(new StatTile(xp == null ? "-" : Format.xp(xp.totalXp()), "Most XP", xp == null ? "" : Format.day(xp.getStartedAt()), Theme.XP));
 		Session loot = records.getMostLoot();
@@ -58,7 +61,7 @@ final class JournalView
 			Summary s = sessions.get(i);
 			long value = metric == 0 ? s.getTotalXp() : metric == 1 ? s.getLootValue() : s.getPlayedMs();
 			String shown = metric == 0 ? Format.xp(value) + " xp" : metric == 1 ? Format.coins(value) + " loot" : Format.duration(value);
-			String label = Format.day(s.getStartedAt()).substring(0, 1);
+			String label = Format.dayOfMonth(s.getStartedAt());
 			bars.add(new BarChart.Bar(label, Format.day(s.getStartedAt()) + ", " + Format.time(s.getStartedAt()) + ": " + shown, value));
 		}
 		Color color = metric == 0 ? Theme.XP : metric == 1 ? Theme.LOOT : Theme.EMBER;
@@ -83,17 +86,33 @@ final class JournalView
 		top.add(Ui.label(Format.duration(s.getPlayedMs()), Theme.small(), Theme.TEXT_MUTED), BorderLayout.EAST);
 		card.add(top, BorderLayout.NORTH);
 		card.add(Ui.label(s.headline(), Theme.body(), Theme.TEXT), BorderLayout.CENTER);
-		JPanel bottom = new JPanel(new GridLayout(1, 3, 4, 0));
+		JPanel bottom = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
 		bottom.setOpaque(false);
-		bottom.add(value(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) + " xp" : "-", Theme.XP));
-		bottom.add(value(s.getLootValue() > 0 ? Format.coins(s.getLootValue()) + " gp" : "-", Theme.LOOT));
-		bottom.add(value(s.getKills() > 0 ? s.getKills() + " kills" : "-", Theme.KILLS));
+		// Only what the session has: a skilling session shows no empty loot and kill columns.
+		if (s.getTotalXp() > 0)
+		{
+			bottom.add(value(Format.xp(s.getTotalXp()) + " xp", Theme.XP));
+		}
+		if (s.getLootValue() > 0)
+		{
+			bottom.add(value(Format.coins(s.getLootValue()) + " gp", Theme.LOOT));
+		}
+		if (s.getKills() > 0)
+		{
+			bottom.add(value(s.getKills() + (s.getKills() == 1 ? " kill" : " kills"), Theme.KILLS));
+		}
+		if (bottom.getComponentCount() == 0)
+		{
+			bottom.add(value("Nothing gained", Theme.TEXT_FAINT));
+		}
 		card.add(bottom, BorderLayout.SOUTH);
 		return card;
 	}
 
 	private static JLabel value(String text, Color color)
 	{
-		return Ui.label(text, Theme.small(), color);
+		JLabel label = Ui.label(text, Theme.small(), color);
+		label.setBorder(new EmptyBorder(0, 0, 0, 10));
+		return label;
 	}
 }

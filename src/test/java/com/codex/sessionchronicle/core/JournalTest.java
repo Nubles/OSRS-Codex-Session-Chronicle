@@ -77,4 +77,38 @@ public class JournalTest
 		Journal.Records none = Journal.records(Collections.emptyList(), null, now, ZoneOffset.UTC);
 		assertEquals(0, none.getStreakDays());
 	}
+
+	@Test
+	public void removesOneSession()
+	{
+		List<Session> journal = new ArrayList<>();
+		for (int i = 0; i < 3; i++)
+		{
+			journal = Journal.file(journal, session(i * DAY, 100, 0), 10);
+		}
+		List<Session> left = Journal.remove(journal, DAY);
+		assertEquals(2, left.size());
+		assertEquals(3, journal.size());
+		assertEquals(2 * DAY, left.get(0).getStartedAt());
+		assertEquals(0, left.get(1).getStartedAt());
+	}
+
+	@Test
+	public void oldSavedJournalsStillRead()
+	{
+		// A journal saved by the first release of the plugin.
+		String saved = "[{\"startedAt\":1000,\"lastSeenAt\":4000,\"endedAt\":4000,\"playedMs\":3000,\"player\":\"Zezima\","
+			+ "\"skills\":{\"Mining\":{\"skill\":\"Mining\",\"startXp\":10,\"xp\":110,\"startLevel\":1,\"level\":2}},"
+			+ "\"loot\":{\"995\":{\"id\":995,\"name\":\"Coins\",\"quantity\":50,\"price\":1}},\"kills\":{},"
+			+ "\"moments\":[{\"kind\":\"LEVEL\",\"at\":2000,\"title\":\"Mining level 2\",\"detail\":\"Up from 1\"}],"
+			+ "\"deaths\":0,\"otherLoot\":0,\"otherDrops\":0}]";
+		List<Session> journal = new com.google.gson.GsonBuilder().create().fromJson(saved,
+			new com.google.gson.reflect.TypeToken<List<Session>>()
+			{
+			}.getType());
+		Summary s = Summary.of(journal.get(0), Summary.State.ENDED);
+		assertEquals(100, s.getTotalXp());
+		assertEquals(50, s.getLootValue());
+		assertEquals("Mining level 2", s.headline());
+	}
 }

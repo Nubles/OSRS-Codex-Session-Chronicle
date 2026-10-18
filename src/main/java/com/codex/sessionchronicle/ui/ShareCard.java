@@ -3,10 +3,8 @@ package com.codex.sessionchronicle.ui;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
-import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Composite;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
@@ -41,7 +39,8 @@ public final class ShareCard
 	/** Renders the card; icons still loading are left out and onLoaded runs when one arrives. */
 	public static BufferedImage render(Summary s, boolean showName, ItemIcons items, Icons skills, Runnable onLoaded)
 	{
-		BufferedImage scratch = new BufferedImage(WIDTH, 2000, BufferedImage.TYPE_INT_ARGB);
+		// A first pass only measures, so it draws into a single pixel.
+		BufferedImage scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D sg = scratch.createGraphics();
 		int height = content(sg, s, showName, items, skills, onLoaded);
 		sg.dispose();
@@ -74,11 +73,6 @@ public final class ShareCard
 			g.setColor(Theme.alpha(grain.nextBoolean() ? Theme.GOLD_BRIGHT : Color.BLACK, 6 + grain.nextInt(8)));
 			g.fillRect(grain.nextInt(w), grain.nextInt(h), 1, 1);
 		}
-
-		Composite old = g.getComposite();
-		g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.06f));
-		Sigil.paint(g, w - 150, h - 170, 170);
-		g.setComposite(old);
 		g.setClip(null);
 
 		g.setStroke(new BasicStroke(1f));
@@ -131,19 +125,32 @@ public final class ShareCard
 		rule(g, x, y, w);
 		y += 10;
 
-		int tileW = (w - 12) / 3;
-		int tileH = 54;
-		StatTile.paint(g, s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()), Theme.XP, x, y, tileW, tileH);
-		StatTile.paint(g, Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), Theme.LOOT, x + tileW + 6, y, tileW, tileH);
+		// Experience and loot always; kills and levels when the session has them, levels if it has neither.
+		List<String[]> tiles = new ArrayList<>();
+		List<Color> colors = new ArrayList<>();
+		tiles.add(new String[]{s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour())});
+		colors.add(Theme.XP);
+		tiles.add(new String[]{Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour())});
+		colors.add(Theme.LOOT);
 		if (s.getKills() > 0)
 		{
-			String top = s.getKillLines().get(0).getName();
-			StatTile.paint(g, String.valueOf(s.getKills()), "Kills", top, Theme.KILLS, x + (tileW + 6) * 2, y, w - (tileW + 6) * 2, tileH);
+			tiles.add(new String[]{String.valueOf(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
+			colors.add(Theme.KILLS);
 		}
-		else
+		if (s.getLevels() > 0 || s.getKills() == 0)
 		{
-			StatTile.paint(g, "+" + s.getLevels(), "Levels", s.getLevels() == 1 ? "level gained" : "levels gained", Theme.GREEN,
-				x + (tileW + 6) * 2, y, w - (tileW + 6) * 2, tileH);
+			tiles.add(new String[]{"+" + s.getLevels(), "Levels", topLevel(s)});
+			colors.add(Theme.GREEN);
+		}
+		int tileH = 54;
+		int gap = 6;
+		int left = x;
+		for (int i = 0; i < tiles.size(); i++)
+		{
+			int tw = i == tiles.size() - 1 ? x + w - left : (w - gap * (tiles.size() - 1)) / tiles.size();
+			String[] t = tiles.get(i);
+			StatTile.paint(g, t[0], t[1], t[2], colors.get(i), left, y, tw, tileH);
+			left += tw + gap;
 		}
 		y += tileH + 12;
 
@@ -240,6 +247,21 @@ public final class ShareCard
 		g.drawString(deaths, x + w - small.stringWidth(deaths), y + small.getAscent());
 		y += small.getHeight();
 		return y + PAD;
+	}
+
+	/** "Ranged 99": the skill that rose the most, for the levels tile. */
+	private static String topLevel(Summary s)
+	{
+		Session.SkillLine best = null;
+		for (Session.SkillLine line : s.getSkills())
+		{
+			int up = line.getLevel() - line.getStartLevel();
+			if (up > 0 && (best == null || up > best.getLevel() - best.getStartLevel()))
+			{
+				best = line;
+			}
+		}
+		return best == null ? "" : best.getSkill() + " " + best.getLevel();
 	}
 
 	private static void header(Graphics2D g, String text, String trailing, int x, int y, int w)

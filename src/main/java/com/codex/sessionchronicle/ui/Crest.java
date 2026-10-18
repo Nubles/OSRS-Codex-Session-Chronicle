@@ -88,7 +88,7 @@ public class Crest extends JPanel
 			default:
 				state = Theme.TEXT_MUTED;
 				caption = "ENDED";
-				subtitle.setText(Format.day(s.getStartedAt()) + ", " + Format.time(s.getStartedAt()));
+				subtitle.setText("From " + Format.day(s.getStartedAt()));
 				break;
 		}
 		subtitle.setForeground(Theme.mix(Theme.TEXT_MUTED, state, 0.35));

@@ -85,7 +85,7 @@ public class Moment
 	/** How much the moment matters when only a few fit: its kind, then a big drop's size. */
 	double rank()
 	{
-		double bonus = kind == Kind.DROP ? Math.min(19, Math.log10(Math.max(1, value)) * 3) : 0;
+		double bonus = value > 0 ? Math.min(19, Math.log10(value) * 3) : 0;
 		return getKind().getWeight() + bonus;
 	}
 }
