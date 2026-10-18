@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.core;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -20,6 +21,9 @@ public final class Summary
 	/** Raids and other runs that are finished rather than killed. */
 	private static final String[] CLEARS = {"chambers of xeric", "theatre of blood", "tombs of amascut", "gauntlet", "corrupted gauntlet",
 		"fortis colosseum", "tzhaar-ket-rak", "hallowed sepulchre"};
+
+	private static final List<String> COMBAT = Arrays.asList("Attack", "Strength", "Defence", "Ranged", "Magic",
+		"Hitpoints", "Prayer", "Slayer");
 
 	public enum State
 	{
@@ -266,7 +270,9 @@ public final class Summary
 		{
 			return gained + " " + top.getSkill() + " levels";
 		}
-		if (!killLines.isEmpty() && killLines.get(0).count() >= 10)
+		// A slayer grind outranks its combat levels; bird nests, crates and reward pools are loot of
+		// a skilling session and never outrank the skill.
+		if (!killLines.isEmpty() && killLines.get(0).count() >= 10 && (top == null || COMBAT.contains(top.getSkill())))
 		{
 			return kills(killLines.get(0));
 		}

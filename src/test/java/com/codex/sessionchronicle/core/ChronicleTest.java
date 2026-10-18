@@ -264,6 +264,8 @@ public class ChronicleTest
 		assertEquals("Mining at 100k/hr", Summary.of(c.current(), Summary.State.LIVE).headline());
 		c.xp("Mining", 1_100_000, 81, 0);
 		assertEquals("Mining level 81", Summary.of(c.current(), Summary.State.LIVE).headline());
+		c.xp("Slayer", 2_000_000, 85, 0);
+		c.xp("Slayer", 2_200_000, 86, 0);
 		for (int i = 0; i < 12; i++)
 		{
 			c.loot("Abyssal demon", Collections.emptyList(), 1, 0, 0);
@@ -301,5 +303,62 @@ public class ChronicleTest
 		assertEquals("12 medium clues", Summary.kills(lines.get(0)));
 		assertEquals("3 Chambers of Xeric clears", Summary.kills(lines.get(1)));
 		assertEquals("3 Chambers of Xeric clears", Summary.of(c.current(), Summary.State.LIVE).headline());
+	}
+
+	@Test
+	public void raidModesKeepTheirOwnKillCounts()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		// One entry raid and one expert raid: two clears, not the gap between the two counters.
+		c.loot("Tombs of Amascut", Collections.emptyList(), 1, 0, 0);
+		c.killCount("Tombs of Amascut: Entry Mode", 500);
+		c.loot("Tombs of Amascut", Collections.emptyList(), 1, 0, 0);
+		c.killCount("Tombs of Amascut: Expert Mode", 21);
+		assertEquals(1, c.current().kills.size());
+		assertEquals(2, c.current().totalKills());
+		c.killCount("Tombs of Amascut: Expert Mode", 22);
+		assertEquals(3, c.current().totalKills());
+	}
+
+	@Test
+	public void challengeModeIsOneClearWithItsLoot()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		// The Loot Tracker names a challenge mode chest "Chambers of Xeric"; the game counts it apart.
+		c.killCount("Chambers of Xeric Challenge Mode", 30);
+		c.loot("Chambers of Xeric", Collections.emptyList(), 1, 0, 0);
+		assertEquals(1, c.current().kills.size());
+		assertEquals(1, c.current().totalKills());
+	}
+
+	@Test
+	public void oldSavedKillCountsStillCount()
+	{
+		Session.KillLine line = new Session.KillLine("Vorkath");
+		line.firstKc = 100;
+		line.lastKc = 104;
+		assertEquals(5, line.count());
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.current().kills.put("vorkath", line);
+		c.killCount("Vorkath", 105);
+		assertEquals(6, c.current().totalKills());
+		assertEquals(105, line.getKillCount());
+	}
+
+	@Test
+	public void skillingEventsDoNotOutrankTheSkill()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.xp("Woodcutting", 1_000_000, 80, 0);
+		c.xp("Woodcutting", 1_100_000, 81, 0);
+		for (int i = 0; i < 12; i++)
+		{
+			c.loot("Bird nest", Collections.emptyList(), 1, 0, 0);
+		}
+		assertEquals("Woodcutting level 81", Summary.of(c.current(), Summary.State.LIVE).headline());
 	}
 }

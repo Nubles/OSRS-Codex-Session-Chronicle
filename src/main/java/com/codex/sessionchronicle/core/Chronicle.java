@@ -2,6 +2,7 @@ package com.codex.sessionchronicle.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -252,11 +253,29 @@ public class Chronicle
 			return;
 		}
 		Session.KillLine line = kill(name);
+		String counter = name.toLowerCase(Locale.ROOT).trim();
+		if (line.counters == null)
+		{
+			line.counters = new LinkedHashMap<>();
+			if (line.firstKc > 0)
+			{
+				// Saved before counters were kept apart: that one counter was most likely this one.
+				line.counters.put(counter, new int[]{line.firstKc, line.lastKc});
+			}
+		}
+		int[] range = line.counters.get(counter);
+		if (range == null)
+		{
+			range = new int[]{count, count};
+			line.counters.put(counter, range);
+		}
+		range[0] = Math.min(range[0], count);
+		range[1] = Math.max(range[1], count);
 		if (line.firstKc <= 0 || count < line.firstKc)
 		{
 			line.firstKc = count;
 		}
-		line.lastKc = Math.max(line.lastKc, count);
+		line.lastKc = range[1];
 	}
 
 	public void moment(Moment moment)
@@ -350,7 +369,8 @@ public class Chronicle
 	/**
 	 * Loot and kill count messages name the same boss slightly differently ("The Nightmare" and
 	 * "Nightmare", "Barrows" and "Barrows chest", "Tombs of Amascut" and "Tombs of Amascut: Expert
-	 * Mode", Dusk and the Grotesque Guardians); this folds them together so a kill counts once.
+	 * Mode", "Chambers of Xeric Challenge Mode" and "Chambers of Xeric", Dusk and the Grotesque
+	 * Guardians); this folds them together so a kill counts once.
 	 */
 	static String key(String name)
 	{
@@ -359,6 +379,11 @@ public class Chronicle
 		if (colon > 0)
 		{
 			key = key.substring(0, colon).trim();
+		}
+		if (key.endsWith(" challenge mode"))
+		{
+			// The Loot Tracker files a challenge mode chest as plain "Chambers of Xeric".
+			key = key.substring(0, key.length() - 15);
 		}
 		if (key.startsWith("the "))
 		{

@@ -303,7 +303,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()))
+		// The plugin's own saves of the session and journal land here too, about once a minute;
+		// only the two settings that change what is drawn are worth acting on.
+		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
+			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey())))
 		{
 			return;
 		}
@@ -345,7 +348,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 
 	/**
 	 * Last Man Standing and the PvP Arena swap the player's stats for fixed ones and give them
-	 * back afterwards. Neither is progress, so stats are ignored while swapped, and once they are
+	 * back afterwards. A world flagged Last Man Standing is an ordinary world otherwise (RuneLite's
+	 * world hopper treats it as one), so only the in-game varbit counts for LMS. Neither is progress, so stats are ignored while swapped, and once they are
 	 * back the session picks up from whatever the game now says.
 	 */
 	private void guard()
@@ -368,7 +372,6 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private boolean statsSwapped()
 	{
 		return client.getVarbitValue(VarbitID.BR_INGAME) != 0
-			|| client.getWorldType().contains(WorldType.LAST_MAN_STANDING)
 			|| client.getWorldType().contains(WorldType.PVP_ARENA);
 	}
 
