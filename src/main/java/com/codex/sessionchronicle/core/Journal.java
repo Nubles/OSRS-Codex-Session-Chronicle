@@ -46,6 +46,14 @@ public final class Journal
 		return next;
 	}
 
+	/** The journal without the session that started at that moment. */
+	public static List<Session> remove(List<Session> journal, long startedAt)
+	{
+		List<Session> next = new ArrayList<>(journal);
+		next.removeIf(s -> s.startedAt == startedAt);
+		return next;
+	}
+
 	/** A copy of the session with only what the journal needs to tell it again. */
 	static Session compact(Session s)
 	{

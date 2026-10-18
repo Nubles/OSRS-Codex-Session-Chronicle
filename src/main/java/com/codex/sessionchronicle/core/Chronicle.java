@@ -2,6 +2,7 @@ package com.codex.sessionchronicle.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -17,6 +18,8 @@ public class Chronicle
 	/** The longest gap between two ticks that still counts as play, so a frozen client does not. */
 	static final long MAX_TICK_GAP_MS = 5_000;
 	static final int MAX_MOMENTS = 200;
+	/** How far apart a big drop and its collection log message can be and still be one moment. */
+	static final long MERGE_MS = 10 * 60_000L;
 
 	private Session current;
 	private boolean live;
@@ -153,6 +156,36 @@ public class Chronicle
 	}
 
 	/**
+	 * The player came back to a session they had paused. Experience gained while they were
+	 * away (on another device) is not this session's, so the starting point moves up with it
+	 * and the rates stay honest. Also used after the game hands back stats it swapped out for a
+	 * minigame, so the swap never counts as progress.
+	 */
+	public void resume(String skill, long xp, int level)
+	{
+		if (current == null || xp < 0)
+		{
+			return;
+		}
+		Session.SkillLine line = current.skills.get(skill);
+		if (line == null)
+		{
+			current.skills.put(skill, new Session.SkillLine(skill, xp, level));
+			return;
+		}
+		if (xp == 0 && line.xp > 0)
+		{
+			return;
+		}
+		long gained = line.gained();
+		int levels = Math.max(0, line.level - line.startLevel);
+		line.xp = xp;
+		line.startXp = Math.max(0, xp - gained);
+		line.level = level;
+		line.startLevel = Math.max(1, level - levels);
+	}
+
+	/**
 	 * Loot from a kill, a raid, a chest or a clue.
 	 *
 	 * @param source what it came from, such as "Vorkath" or "Chambers of Xeric"
@@ -193,7 +226,17 @@ public class Chronicle
 			if (valuable > 0 && drop.value() >= valuable)
 			{
 				String name = drop.quantity > 1 ? drop.quantity + " x " + drop.getName() : drop.getName();
-				String from = source == null || source.isEmpty() ? "" : "From " + source + ", ";
+				String from = source == null || source.isEmpty() ? "" : source + ", ";
+				Moment logged = recent(Moment.Kind.COLLECTION, drop.getName(), now);
+				if (logged != null)
+				{
+					// The log slot was announced first (a raid chest); the drop gives it a picture and a worth.
+					logged.itemId = drop.id;
+					logged.value = drop.value();
+					logged.detail = "New log slot, " + from + coins(drop.value());
+					moments.add(logged);
+					continue;
+				}
 				Moment m = new Moment(Moment.Kind.DROP, now, name, from + "worth " + coins(drop.value()), drop.id, drop.value());
 				add(m);
 				moments.add(m);
@@ -210,29 +253,86 @@ public class Chronicle
 			return;
 		}
 		Session.KillLine line = kill(name);
+		String counter = name.toLowerCase(Locale.ROOT).trim();
+		if (line.counters == null)
+		{
+			line.counters = new LinkedHashMap<>();
+			if (line.firstKc > 0)
+			{
+				// Saved before counters were kept apart: that one counter was most likely this one.
+				line.counters.put(counter, new int[]{line.firstKc, line.lastKc});
+			}
+		}
+		int[] range = line.counters.get(counter);
+		if (range == null)
+		{
+			range = new int[]{count, count};
+			line.counters.put(counter, range);
+		}
+		range[0] = Math.min(range[0], count);
+		range[1] = Math.max(range[1], count);
 		if (line.firstKc <= 0 || count < line.firstKc)
 		{
 			line.firstKc = count;
 		}
-		line.lastKc = Math.max(line.lastKc, count);
+		line.lastKc = range[1];
 	}
 
 	public void moment(Moment moment)
 	{
-		if (current != null)
+		if (current == null || moment == null)
 		{
-			add(moment);
+			return;
 		}
+		if (moment.getKind() == Moment.Kind.COLLECTION)
+		{
+			Moment drop = recent(Moment.Kind.DROP, moment.getTitle(), moment.getAt());
+			if (drop != null)
+			{
+				// The same item as a big drop a moment ago: one moment that says both.
+				drop.kind = Moment.Kind.COLLECTION;
+				drop.title = moment.getTitle();
+				drop.detail = "New log slot, " + (drop.detail == null ? "" : drop.detail.replace("worth ", ""));
+				return;
+			}
+		}
+		add(moment);
 	}
 
-	public void death(long now, String where)
+	/** The latest moment of a kind about an item, if it happened within the merge window. */
+	private Moment recent(Moment.Kind kind, String item, long now)
+	{
+		List<Moment> moments = current.moments;
+		for (int i = moments.size() - 1; i >= 0 && i >= moments.size() - 12; i--)
+		{
+			Moment m = moments.get(i);
+			if (now - m.getAt() > MERGE_MS)
+			{
+				break;
+			}
+			String title = m.getTitle();
+			if (m.getKind() == kind && (title.equals(item) || title.endsWith(" x " + item)))
+			{
+				return m;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The player died.
+	 *
+	 * @param killer what they were fighting, or null
+	 */
+	public void death(long now, String killer)
 	{
 		if (current == null)
 		{
 			return;
 		}
 		current.deaths++;
-		add(new Moment(Moment.Kind.DEATH, now, "Oh dear, you are dead", where, 0, 0));
+		String detail = killer == null || killer.isEmpty() ? "Back to the respawn point" : "Killed by " + killer;
+		add(new Moment(Moment.Kind.DEATH, now, "Oh dear, you are dead", detail, 0, 0));
 	}
 
 	private void add(Moment moment)
@@ -266,15 +366,44 @@ public class Chronicle
 		return line;
 	}
 
-	/** Loot and kill count messages name the same boss slightly differently; this folds them together. */
+	/**
+	 * Loot and kill count messages name the same boss slightly differently ("The Nightmare" and
+	 * "Nightmare", "Barrows" and "Barrows chest", "Tombs of Amascut" and "Tombs of Amascut: Expert
+	 * Mode", "Chambers of Xeric Challenge Mode" and "Chambers of Xeric", Dusk and the Grotesque
+	 * Guardians); this folds them together so a kill counts once.
+	 */
 	static String key(String name)
 	{
 		String key = name.toLowerCase(Locale.ROOT).trim();
+		int colon = key.indexOf(':');
+		if (colon > 0)
+		{
+			key = key.substring(0, colon).trim();
+		}
+		if (key.endsWith(" challenge mode"))
+		{
+			// The Loot Tracker files a challenge mode chest as plain "Chambers of Xeric".
+			key = key.substring(0, key.length() - 15);
+		}
+		if (key.startsWith("the "))
+		{
+			key = key.substring(4);
+		}
 		if (key.endsWith(" chest"))
 		{
 			key = key.substring(0, key.length() - 6);
 		}
+		if (key.equals("dusk") || key.equals("dawn"))
+		{
+			key = "grotesque guardians";
+		}
 		return key;
+	}
+
+	/** "950", "41k", "1.2M": a number short enough for a headline. */
+	static String amount(long n)
+	{
+		return n < 1_000 ? String.valueOf(n) : coins(n);
 	}
 
 	static String coins(long gp)

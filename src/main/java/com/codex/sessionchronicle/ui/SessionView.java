@@ -26,16 +26,25 @@ final class SessionView
 
 	/**
 	 * @param backToLive shown as a button when an older session is open; null for the live one
+	 * @param remove takes the open older session out of the journal; null for the live one
+	 * @param end closes the live session now; null for an older one
 	 */
-	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive)
+	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end)
 	{
 		StackPanel stack = new StackPanel(8, 8);
 		if (backToLive != null)
 		{
-			Card banner = new Card(new BorderLayout(6, 0));
+			Card banner = new Card(new BorderLayout(0, 6));
 			banner.accent(Theme.GOLD_DIM);
-			banner.add(Ui.label("From the journal", Theme.small(), Theme.TEXT_MUTED), BorderLayout.CENTER);
-			banner.add(new CodexButton("Back to live", false, backToLive), BorderLayout.EAST);
+			banner.add(Ui.label("From the journal", Theme.small(), Theme.TEXT_MUTED), BorderLayout.NORTH);
+			JPanel buttons = new JPanel(new BorderLayout(6, 0));
+			buttons.setOpaque(false);
+			buttons.add(new CodexButton("Back to live", false, backToLive), BorderLayout.WEST);
+			if (remove != null)
+			{
+				buttons.add(CodexButton.confirming("Remove", "Remove it?", remove), BorderLayout.EAST);
+			}
+			banner.add(buttons, BorderLayout.CENTER);
 			stack.add(banner);
 		}
 		if (s == null)
@@ -68,7 +77,7 @@ final class SessionView
 				levelled = line;
 			}
 		}
-		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "" : levelled.getSkill() + " " + levelled.getLevel(), Theme.GREEN));
+		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "none this time" : levelled.getSkill() + " " + levelled.getLevel(), Theme.GREEN));
 		List<Session.KillLine> killLines = s.getKillLines();
 		tiles.add(new StatTile(String.valueOf(s.getKills()), "Kills", killLines.isEmpty() ? "" : killLines.get(0).getName(), Theme.KILLS));
 		stack.add(tiles);
@@ -125,6 +134,20 @@ final class SessionView
 				timeline.add(new MomentRow(m, icon, i == 0, i == moments.size() - 1));
 			}
 			stack.add(timeline);
+		}
+
+		if (end != null && s.getState() != Summary.State.ENDED)
+		{
+			stack.space(4);
+			JPanel row = new JPanel(new BorderLayout(8, 0));
+			row.setOpaque(false);
+			row.add(Ui.wrapped("Changing activity? File this session now.", Theme.small(), Theme.TEXT_FAINT, WIDTH - 90),
+				BorderLayout.CENTER);
+			JPanel holder = new JPanel(new BorderLayout());
+			holder.setOpaque(false);
+			holder.add(CodexButton.confirming("End session", "End it now?", end), BorderLayout.NORTH);
+			row.add(holder, BorderLayout.EAST);
+			stack.add(row);
 		}
 		return stack;
 	}

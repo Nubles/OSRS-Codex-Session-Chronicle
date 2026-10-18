@@ -3,10 +3,8 @@ package com.codex.sessionchronicle.ui;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
-import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Composite;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GradientPaint;
@@ -41,7 +39,8 @@ public final class ShareCard
 	/** Renders the card; icons still loading are left out and onLoaded runs when one arrives. */
 	public static BufferedImage render(Summary s, boolean showName, ItemIcons items, Icons skills, Runnable onLoaded)
 	{
-		BufferedImage scratch = new BufferedImage(WIDTH, 2000, BufferedImage.TYPE_INT_ARGB);
+		// A first pass only measures, so it draws into a single pixel.
+		BufferedImage scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 		Graphics2D sg = scratch.createGraphics();
 		int height = content(sg, s, showName, items, skills, onLoaded);
 		sg.dispose();
@@ -74,11 +73,6 @@ public final class ShareCard
 			g.setColor(Theme.alpha(grain.nextBoolean() ? Theme.GOLD_BRIGHT : Color.BLACK, 6 + grain.nextInt(8)));
 			g.fillRect(grain.nextInt(w), grain.nextInt(h), 1, 1);
 		}
-
-		Composite old = g.getComposite();
-		g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.06f));
-		Sigil.paint(g, w - 150, h - 170, 170);
-		g.setComposite(old);
 		g.setClip(null);
 
 		g.setStroke(new BasicStroke(1f));
@@ -111,18 +105,35 @@ public final class ShareCard
 		g.drawString(date, x + w - small.stringWidth(date), y + small.getAscent() - 1);
 		y += small.getHeight() + 8;
 
-		if (showName && s.getPlayer() != null)
+		boolean named = showName && s.getPlayer() != null;
+		String headline = s.headline();
+		// The name heads the card; without it the headline takes its place, as large as fits.
+		String big = named ? s.getPlayer() : headline;
+		Font font = Theme.title();
+		for (float scale : new float[]{2f, 1.5f})
 		{
-			Font big = Theme.title().deriveFont(Theme.title().getSize2D() * 2);
-			g.setFont(big);
-			FontMetrics fm = g.getFontMetrics();
-			Ui.shadowed(g, Ui.clip(s.getPlayer(), fm, w), x, y + fm.getAscent() - 4, Theme.GOLD_BRIGHT);
-			y += fm.getAscent() - 2;
+			Font scaled = Theme.title().deriveFont(Theme.title().getSize2D() * scale);
+			if (named || g.getFontMetrics(scaled).stringWidth(big) <= w)
+			{
+				font = scaled;
+				break;
+			}
 		}
+		g.setFont(font);
+		FontMetrics large = g.getFontMetrics();
+		Ui.shadowed(g, Ui.clip(big, large, w), x, y + large.getAscent() - 4, Theme.GOLD_BRIGHT);
+		y += large.getAscent() - 2;
 		g.setFont(Theme.title());
 		FontMetrics bold = g.getFontMetrics();
-		Ui.shadowed(g, Ui.clip(s.headline(), bold, w), x, y + bold.getAscent(), showName ? Theme.TEXT : Theme.GOLD_BRIGHT);
-		y += bold.getHeight();
+		if (named)
+		{
+			Ui.shadowed(g, Ui.clip(headline, bold, w), x, y + bold.getAscent(), Theme.TEXT);
+			y += bold.getHeight();
+		}
+		else
+		{
+			y += 4;
+		}
 		g.setFont(Theme.small());
 		String when = Format.duration(s.getPlayedMs()) + " played, " + Format.time(s.getStartedAt()) + " to " + Format.time(s.getEndedAt());
 		g.setColor(Theme.TEXT_MUTED);
@@ -131,19 +142,32 @@ public final class ShareCard
 		rule(g, x, y, w);
 		y += 10;
 
-		int tileW = (w - 12) / 3;
-		int tileH = 54;
-		StatTile.paint(g, s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()), Theme.XP, x, y, tileW, tileH);
-		StatTile.paint(g, Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), Theme.LOOT, x + tileW + 6, y, tileW, tileH);
+		// Experience and loot always; kills and levels when the session has them, levels if it has neither.
+		List<String[]> tiles = new ArrayList<>();
+		List<Color> colors = new ArrayList<>();
+		tiles.add(new String[]{s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour())});
+		colors.add(Theme.XP);
+		tiles.add(new String[]{Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour())});
+		colors.add(Theme.LOOT);
 		if (s.getKills() > 0)
 		{
-			String top = s.getKillLines().get(0).getName();
-			StatTile.paint(g, String.valueOf(s.getKills()), "Kills", top, Theme.KILLS, x + (tileW + 6) * 2, y, w - (tileW + 6) * 2, tileH);
+			tiles.add(new String[]{String.valueOf(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
+			colors.add(Theme.KILLS);
 		}
-		else
+		if (s.getLevels() > 0 || s.getKills() == 0)
 		{
-			StatTile.paint(g, "+" + s.getLevels(), "Levels", s.getLevels() == 1 ? "level gained" : "levels gained", Theme.GREEN,
-				x + (tileW + 6) * 2, y, w - (tileW + 6) * 2, tileH);
+			tiles.add(new String[]{"+" + s.getLevels(), "Levels", topLevel(s)});
+			colors.add(Theme.GREEN);
+		}
+		int tileH = 54;
+		int gap = 6;
+		int left = x;
+		for (int i = 0; i < tiles.size(); i++)
+		{
+			int tw = i == tiles.size() - 1 ? x + w - left : (w - gap * (tiles.size() - 1)) / tiles.size();
+			String[] t = tiles.get(i);
+			StatTile.paint(g, t[0], t[1], t[2], colors.get(i), left, y, tw, tileH);
+			left += tw + gap;
 		}
 		y += tileH + 12;
 
@@ -186,8 +210,9 @@ public final class ShareCard
 			header(g, "Kills", null, x, y, w);
 			y += 24;
 			int top = kills.get(0).count();
-			int colW = (w - 16) / 2;
 			int shown = Math.min(KILLS, kills.size());
+			// One line of kills spans the page, so its count sits at the edge like the skills above.
+			int colW = shown == 1 ? w : (w - 16) / 2;
 			for (int i = 0; i < shown; i++)
 			{
 				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % 2) * (colW + 16), y + (i / 2) * 20, colW);
@@ -240,6 +265,21 @@ public final class ShareCard
 		g.drawString(deaths, x + w - small.stringWidth(deaths), y + small.getAscent());
 		y += small.getHeight();
 		return y + PAD;
+	}
+
+	/** "Ranged 99": the skill that rose the most, for the levels tile. */
+	private static String topLevel(Summary s)
+	{
+		Session.SkillLine best = null;
+		for (Session.SkillLine line : s.getSkills())
+		{
+			int up = line.getLevel() - line.getStartLevel();
+			if (up > 0 && (best == null || up > best.getLevel() - best.getStartLevel()))
+			{
+				best = line;
+			}
+		}
+		return best == null ? "" : best.getSkill() + " " + best.getLevel();
 	}
 
 	private static void header(Graphics2D g, String text, String trailing, int x, int y, int w)

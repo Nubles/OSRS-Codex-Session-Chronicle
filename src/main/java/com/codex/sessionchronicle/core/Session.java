@@ -211,6 +211,12 @@ public class Session
 		int looted;
 		int firstKc;
 		int lastKc;
+		/**
+		 * The first and last count of each counter the game keeps for it, by the name it gave:
+		 * entry and expert Tombs of Amascut, or normal and challenge mode Chambers, count apart.
+		 * Null in sessions saved before it, which kept one counter in firstKc and lastKc.
+		 */
+		Map<String, int[]> counters;
 
 		KillLine()
 		{
@@ -228,11 +234,22 @@ public class Session
 
 		public int count()
 		{
-			int counted = firstKc > 0 ? lastKc - firstKc + 1 : 0;
+			int counted = 0;
+			if (counters != null)
+			{
+				for (int[] range : counters.values())
+				{
+					counted += range[1] - range[0] + 1;
+				}
+			}
+			else if (firstKc > 0)
+			{
+				counted = lastKc - firstKc + 1;
+			}
 			return Math.max(looted, counted);
 		}
 
-		/** The game's kill count after the last kill, or 0 if the game never said. */
+		/** The game's kill count after the latest kill, or 0 if the game never said. */
 		public int getKillCount()
 		{
 			return lastKc;

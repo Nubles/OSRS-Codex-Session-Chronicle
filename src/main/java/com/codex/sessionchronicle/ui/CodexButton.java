@@ -11,14 +11,19 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import javax.swing.JComponent;
+import javax.swing.Timer;
 
 /** A gilt-edged button; the primary style is filled, the quiet style is just an outline. */
 public class CodexButton extends JComponent
 {
-	private final String text;
+	/** How long a button that asks for a second click waits for it. */
+	private static final int CONFIRM_MS = 3_000;
+
+	private String text;
 	private final boolean primary;
 	private boolean hover;
 	private boolean pressed;
+	private Color warn;
 
 	public CodexButton(String text, boolean primary, Runnable action)
 	{
@@ -27,11 +32,7 @@ public class CodexButton extends JComponent
 		setFont(Theme.small());
 		setOpaque(false);
 		setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-		FontMetrics fm = getFontMetrics(getFont());
-		Dimension d = new Dimension(fm.stringWidth(text) + 20, 22);
-		setPreferredSize(d);
-		setMinimumSize(d);
-		setMaximumSize(d);
+		size(text);
 		addMouseListener(new MouseAdapter()
 		{
 			@Override
@@ -70,6 +71,51 @@ public class CodexButton extends JComponent
 		});
 	}
 
+	/**
+	 * A quiet button for something that cannot be undone: the first click asks again in its own
+	 * label, and only a second click within a few seconds does it.
+	 */
+	public static CodexButton confirming(String text, String confirm, Runnable action)
+	{
+		CodexButton[] self = new CodexButton[1];
+		Timer reset = new Timer(CONFIRM_MS, e -> self[0].arm(null, text));
+		reset.setRepeats(false);
+		self[0] = new CodexButton(text, false, () ->
+		{
+			if (self[0].warn == null)
+			{
+				self[0].arm(Theme.BLOOD, confirm);
+				reset.restart();
+			}
+			else
+			{
+				reset.stop();
+				self[0].arm(null, text);
+				action.run();
+			}
+		});
+		// Keep the button the width of its longer label so the row does not jump.
+		FontMetrics fm = self[0].getFontMetrics(self[0].getFont());
+		self[0].size(fm.stringWidth(confirm) > fm.stringWidth(text) ? confirm : text);
+		return self[0];
+	}
+
+	private void arm(Color color, String label)
+	{
+		warn = color;
+		text = label;
+		repaint();
+	}
+
+	private void size(String widest)
+	{
+		FontMetrics fm = getFontMetrics(getFont());
+		Dimension d = new Dimension(fm.stringWidth(widest) + 20, 22);
+		setPreferredSize(d);
+		setMinimumSize(d);
+		setMaximumSize(d);
+	}
+
 	@Override
 	protected void paintComponent(Graphics graphics)
 	{
@@ -89,11 +135,12 @@ public class CodexButton extends JComponent
 		}
 		else
 		{
-			g.setColor(hover ? Theme.alpha(Theme.GOLD, 40) : Theme.alpha(Theme.GOLD, 14));
+			Color tint = warn != null ? warn : Theme.GOLD;
+			g.setColor(hover ? Theme.alpha(tint, 40) : Theme.alpha(tint, 14));
 			g.fill(shape);
-			text = hover ? Theme.GOLD_BRIGHT : Theme.GOLD;
+			text = warn != null ? Theme.mix(warn, Theme.TEXT, 0.35) : hover ? Theme.GOLD_BRIGHT : Theme.GOLD;
 		}
-		g.setColor(Theme.alpha(Theme.GOLD, primary ? 220 : 140));
+		g.setColor(Theme.alpha(warn != null ? warn : Theme.GOLD, primary ? 220 : 140));
 		g.draw(shape);
 		g.setFont(getFont());
 		FontMetrics fm = g.getFontMetrics();

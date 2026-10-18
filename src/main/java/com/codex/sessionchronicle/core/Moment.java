@@ -6,8 +6,8 @@ public class Moment
 	/** What kind of moment it is; the order is how much it matters on a card. */
 	public enum Kind
 	{
-		PET(100),
-		MAX(90),
+		PET(120),
+		MAX(100),
 		COLLECTION(80),
 		DROP(70),
 		QUEST(60),
@@ -85,7 +85,7 @@ public class Moment
 	/** How much the moment matters when only a few fit: its kind, then a big drop's size. */
 	double rank()
 	{
-		double bonus = kind == Kind.DROP ? Math.min(19, Math.log10(Math.max(1, value)) * 3) : 0;
+		double bonus = value > 0 ? Math.min(19, Math.log10(value) * 3) : 0;
 		return getKind().getWeight() + bonus;
 	}
 }

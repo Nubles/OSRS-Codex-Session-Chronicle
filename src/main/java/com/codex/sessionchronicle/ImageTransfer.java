@@ -3,6 +3,8 @@ package com.codex.sessionchronicle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import com.codex.sessionchronicle.ui.Theme;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
 /** Hands the card to the system clipboard as a picture. */
@@ -13,6 +15,21 @@ final class ImageTransfer implements Transferable
 	ImageTransfer(BufferedImage image)
 	{
 		this.image = image;
+	}
+
+	/**
+	 * The card on a solid backing. Some clipboards (Windows among them) drop transparency and
+	 * would paint the card's rounded corners black, so they are filled with the card's own ink.
+	 */
+	static BufferedImage opaque(BufferedImage card)
+	{
+		BufferedImage out = new BufferedImage(card.getWidth(), card.getHeight(), BufferedImage.TYPE_INT_RGB);
+		Graphics2D g = out.createGraphics();
+		g.setColor(Theme.INK_DEEP);
+		g.fillRect(0, 0, out.getWidth(), out.getHeight());
+		g.drawImage(card, 0, 0, null);
+		g.dispose();
+		return out;
 	}
 
 	@Override

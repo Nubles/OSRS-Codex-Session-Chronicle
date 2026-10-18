@@ -11,6 +11,7 @@ import com.codex.sessionchronicle.ui.CardActions;
 import com.codex.sessionchronicle.ui.ChroniclePanel;
 import com.codex.sessionchronicle.ui.Format;
 import com.codex.sessionchronicle.ui.Icons;
+import com.codex.sessionchronicle.ui.SessionActions;
 import com.codex.sessionchronicle.ui.ItemIcons;
 import com.codex.sessionchronicle.ui.Sigil;
 import com.google.gson.Gson;
@@ -38,8 +39,11 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.NPC;
+import net.runelite.api.Actor;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
+import net.runelite.api.WorldType;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
@@ -52,6 +56,7 @@ import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.NpcLootReceived;
 import net.runelite.client.events.RuneScapeProfileChanged;
@@ -84,8 +89,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final Type JOURNAL_TYPE = new TypeToken<List<Session>>()
 	{
 	}.getType();
-	/** Ticks between panel refreshes when only the clock moved. */
+	/** Ticks between panel refreshes when only the clock and the experience moved. */
 	private static final int REFRESH_TICKS = 5;
+	/** Ticks to wait after logging in, so the stats the game sends at login are all in. */
+	private static final int LOGIN_TICKS = 2;
+	/** Ticks to keep ignoring stats after a minigame hands the player's own stats back. */
+	private static final int GUARD_TICKS = 3;
 	/** Ticks between saves of the session being lived, about a minute. */
 	private static final int SAVE_TICKS = 100;
 	/** How long a kill count stays fresh enough to name the personal best that follows it. */
@@ -135,9 +144,15 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private List<Session> journal = Collections.emptyList();
 	private List<Summary> pastSummaries = Collections.emptyList();
 	private boolean pendingBegin;
+	private int loginTicks;
+	private boolean quietBegin;
 	private boolean dirty;
-	private boolean unsaved;
+	private boolean saveSoon;
+	private int guardTicks;
 	private int ticks;
+	/** The session being lived as last saved or shown, so it can be written as the client closes. */
+	private volatile String snapshot;
+	private volatile String snapshotProfile;
 	private String recentKc;
 	private long recentKcAt;
 
@@ -180,6 +195,19 @@ public class CodexSessionChroniclePlugin extends Plugin
 			{
 				copyCard(card);
 			}
+		}, new SessionActions()
+		{
+			@Override
+			public void endSession()
+			{
+				clientThread.invoke(CodexSessionChroniclePlugin.this::endNow);
+			}
+
+			@Override
+			public void removeSession(long startedAt)
+			{
+				clientThread.invoke(() -> forget(startedAt));
+			}
 		});
 		panel.setShowName(config.nameOnCard());
 		navButton = NavigationButton.builder()
@@ -196,6 +224,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			loadProfile();
 			pendingBegin = client.getGameState() == GameState.LOGGED_IN;
+			loginTicks = LOGIN_TICKS;
 			publish();
 		});
 	}
@@ -219,6 +248,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			journal = Collections.emptyList();
 			pastSummaries = Collections.emptyList();
 			pendingBegin = false;
+			snapshot = null;
 		});
 		panel = null;
 	}
@@ -229,9 +259,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 		GameState state = event.getGameState();
 		if (state == GameState.LOGGED_IN)
 		{
-			if (!chronicle.isLive())
+			if (!chronicle.isLive() && !pendingBegin)
 			{
 				pendingBegin = true;
+				loginTicks = 0;
 			}
 		}
 		else if (state == GameState.LOGIN_SCREEN)
@@ -257,10 +288,25 @@ public class CodexSessionChroniclePlugin extends Plugin
 		publish();
 	}
 
+	/** The client is closing: write the session as it last stood, since game ticks have stopped. */
+	@Subscribe
+	public void onClientShutdown(ClientShutdown event)
+	{
+		String json = snapshot;
+		String key = snapshotProfile;
+		if (json != null && key != null)
+		{
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, key, CURRENT_KEY, json);
+		}
+	}
+
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()))
+		// The plugin's own saves of the session and journal land here too, about once a minute;
+		// only the two settings that change what is drawn are worth acting on.
+		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
+			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey())))
 		{
 			return;
 		}
@@ -277,7 +323,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 	public void onGameTick(GameTick tick)
 	{
 		long now = System.currentTimeMillis();
-		if (pendingBegin)
+		if (pendingBegin && ++loginTicks > LOGIN_TICKS)
 		{
 			tryBegin(now);
 		}
@@ -285,10 +331,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			return;
 		}
+		guard();
 		chronicle.tick(now);
-		unsaved = true;
 		ticks++;
-		if (ticks % SAVE_TICKS == 0)
+		Session current = chronicle.current();
+		ticker.show(new SessionTicker.View(current.getPlayedMs(), now, true, current.totalXp(), current.lootValue()));
+		if (saveSoon || ticks % SAVE_TICKS == 0)
 		{
 			saveCurrent();
 		}
@@ -298,11 +346,40 @@ public class CodexSessionChroniclePlugin extends Plugin
 		}
 	}
 
+	/**
+	 * Last Man Standing and the PvP Arena swap the player's stats for fixed ones and give them
+	 * back afterwards. A world flagged Last Man Standing is an ordinary world otherwise (RuneLite's
+	 * world hopper treats it as one), so only the in-game varbit counts for LMS. Neither is progress, so stats are ignored while swapped, and once they are
+	 * back the session picks up from whatever the game now says.
+	 */
+	private void guard()
+	{
+		if (statsSwapped())
+		{
+			guardTicks = GUARD_TICKS;
+			return;
+		}
+		if (guardTicks > 0 && --guardTicks == 0)
+		{
+			for (Skill skill : Skill.values())
+			{
+				chronicle.resume(skill.getName(), client.getSkillExperience(skill), client.getRealSkillLevel(skill));
+			}
+			dirty = true;
+		}
+	}
+
+	private boolean statsSwapped()
+	{
+		return client.getVarbitValue(VarbitID.BR_INGAME) != 0
+			|| client.getWorldType().contains(WorldType.PVP_ARENA);
+	}
+
 	/** Starts or picks up the session once the account and its stats are readable. */
 	private void tryBegin(long now)
 	{
 		Player player = client.getLocalPlayer();
-		if (player == null || player.getName() == null || client.getOverallExperience() <= 0)
+		if (player == null || player.getName() == null || client.getOverallExperience() <= 0 || statsSwapped())
 		{
 			return;
 		}
@@ -323,14 +400,54 @@ public class CodexSessionChroniclePlugin extends Plugin
 		boolean fresh = chronicle.current().getStartedAt() == now;
 		for (Skill skill : Skill.values())
 		{
-			chronicle.xp(skill.getName(), client.getSkillExperience(skill), client.getRealSkillLevel(skill), now);
+			if (fresh)
+			{
+				chronicle.xp(skill.getName(), client.getSkillExperience(skill), client.getRealSkillLevel(skill), now);
+			}
+			else
+			{
+				chronicle.resume(skill.getName(), client.getSkillExperience(skill), client.getRealSkillLevel(skill));
+			}
 		}
-		if (fresh && config.chatRecap() && !journal.isEmpty())
+		if (fresh && !quietBegin && config.chatRecap() && !journal.isEmpty())
 		{
 			recap(journal.get(0));
 		}
+		quietBegin = false;
 		saveCurrent();
 		dirty = true;
+		publish();
+	}
+
+	/** The player asked to close the session now; a new one begins at once if they are in the game. */
+	private void endNow()
+	{
+		if (chronicle.current() == null)
+		{
+			return;
+		}
+		chronicle.pause(System.currentTimeMillis());
+		Session closed = chronicle.close();
+		if (closed != null)
+		{
+			file(closed);
+		}
+		saveCurrent();
+		if (client.getGameState() == GameState.LOGGED_IN)
+		{
+			pendingBegin = true;
+			loginTicks = LOGIN_TICKS;
+			quietBegin = true;
+		}
+		publish();
+	}
+
+	/** Takes one session out of the journal. */
+	private void forget(long startedAt)
+	{
+		journal = Journal.remove(journal, startedAt);
+		summarisePast();
+		storeJournal();
 		publish();
 	}
 
@@ -348,15 +465,16 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
-		if (!chronicle.isLive())
+		if (!chronicle.isLive() || guardTicks > 0 || statsSwapped())
 		{
 			return;
 		}
 		List<Moment> moments = chronicle.xp(event.getSkill().getName(), event.getXp(), event.getLevel(), System.currentTimeMillis());
-		dirty = true;
 		if (!moments.isEmpty())
 		{
-			unsaved = true;
+			// A level is worth showing and keeping straight away; plain experience waits for the next refresh.
+			dirty = true;
+			saveSoon = true;
 		}
 	}
 
@@ -392,8 +510,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 			ItemComposition item = itemManager.getItemComposition(id);
 			drops.add(new Session.Drop(id, item.getName(), stack.getQuantity(), itemManager.getItemPrice(id)));
 		}
-		chronicle.loot(source == null ? null : Text.removeTags(source), drops, kills, config.valuableDrop(), System.currentTimeMillis());
+		List<Moment> moments = chronicle.loot(source == null ? null : Text.removeTags(source), drops, kills, config.valuableDrop(),
+			System.currentTimeMillis());
 		dirty = true;
+		saveSoon |= !moments.isEmpty();
 	}
 
 	@Subscribe
@@ -419,16 +539,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			chronicle.moment(moment);
 			dirty = true;
+			saveSoon = true;
 		}
 	}
 
 	@Subscribe
 	public void onActorDeath(ActorDeath event)
 	{
-		if (chronicle.isLive() && event.getActor() == client.getLocalPlayer())
+		Player player = client.getLocalPlayer();
+		if (chronicle.isLive() && player != null && event.getActor() == player && !statsSwapped())
 		{
-			chronicle.death(System.currentTimeMillis(), "Back to the respawn point");
+			Actor foe = player.getInteracting();
+			String killer = foe instanceof NPC && foe.getName() != null ? Text.removeTags(foe.getName()) : null;
+			chronicle.death(System.currentTimeMillis(), killer);
 			dirty = true;
+			saveSoon = true;
 		}
 	}
 
@@ -478,6 +603,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 	{
 		journal = Journal.file(journal, closed, config.journalSize());
 		summarisePast();
+		storeJournal();
+	}
+
+	private void storeJournal()
+	{
 		if (profile != null)
 		{
 			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, JOURNAL_KEY, gson.toJson(journal, JOURNAL_TYPE));
@@ -496,19 +626,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 
 	private void saveCurrent()
 	{
-		unsaved = false;
+		saveSoon = false;
+		Session current = chronicle.current();
+		snapshot = current == null ? null : gson.toJson(current);
+		snapshotProfile = profile;
 		if (profile == null)
 		{
 			return;
 		}
-		Session current = chronicle.current();
 		if (current == null)
 		{
 			configManager.unsetConfiguration(CodexSessionChronicleConfig.GROUP, profile, CURRENT_KEY);
 		}
 		else
 		{
-			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, CURRENT_KEY, gson.toJson(current));
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, CURRENT_KEY, snapshot);
 		}
 	}
 
@@ -534,9 +666,13 @@ public class CodexSessionChroniclePlugin extends Plugin
 		dirty = false;
 		Session current = chronicle.current();
 		Summary live = null;
+		Session copy = null;
 		if (current != null)
 		{
-			Session copy = gson.fromJson(gson.toJson(current), Session.class);
+			String json = gson.toJson(current);
+			snapshot = json;
+			snapshotProfile = profile;
+			copy = gson.fromJson(json, Session.class);
 			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED);
 			ticker.show(new SessionTicker.View(copy.getPlayedMs(), System.currentTimeMillis(), chronicle.isLive(), copy.totalXp(), copy.lootValue()));
 		}
@@ -544,8 +680,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			ticker.show(null);
 		}
-		Journal.Records records = Journal.records(journal, current == null ? null : gson.fromJson(gson.toJson(current), Session.class),
-			System.currentTimeMillis(), ZoneId.systemDefault());
+		Journal.Records records = Journal.records(journal, copy, System.currentTimeMillis(), ZoneId.systemDefault());
 		Player player = client.getLocalPlayer();
 		String name = client.getGameState() == GameState.LOGGED_IN && player != null ? player.getName() : null;
 		List<Summary> past = pastSummaries;
@@ -600,7 +735,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		String note;
 		try
 		{
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new ImageTransfer(card), null);
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new ImageTransfer(ImageTransfer.opaque(card)), null);
 			note = "Copied. Paste it anywhere you share pictures.";
 		}
 		catch (IllegalStateException e)
