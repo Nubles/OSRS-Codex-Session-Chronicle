@@ -4,6 +4,7 @@ import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
 import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Journal;
+import com.codex.sessionchronicle.core.LedgerWorth;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
@@ -50,6 +51,9 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.WidgetClosed;
+import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatColorType;
 import net.runelite.client.chat.ChatMessageBuilder;
@@ -87,6 +91,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final Logger log = LoggerFactory.getLogger(CodexSessionChroniclePlugin.class);
 	private static final String CURRENT_KEY = "current";
 	private static final String JOURNAL_KEY = "journal";
+	/** Codex Ledger's saved book, read only for its net worth; see LedgerWorth. */
+	static final String LEDGER_GROUP = "codexledger";
+	static final String LEDGER_KEY = "ledger";
 	private static final Type JOURNAL_TYPE = new TypeToken<List<Session>>()
 	{
 	}.getType();
@@ -316,6 +323,15 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
+		if (LEDGER_GROUP.equals(event.getGroup()))
+		{
+			// Codex Ledger saved its book: the session's worth may have moved.
+			if (LEDGER_KEY.equals(event.getKey()) && event.getProfile() != null && event.getProfile().equals(profile))
+			{
+				clientThread.invokeLater(this::readWorth);
+			}
+			return;
+		}
 		// The plugin's own saves of the session and journal land here too, about once a minute;
 		// only the two settings that change what is drawn are worth acting on.
 		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
@@ -437,9 +453,59 @@ public class CodexSessionChroniclePlugin extends Plugin
 			recap(journal.get(0));
 		}
 		quietBegin = false;
+		readWorth();
 		saveCurrent();
 		dirty = true;
 		publish();
+	}
+
+	/** Reads Codex Ledger's net worth for the session, when Ledger is installed and has seen the bank. */
+	private void readWorth()
+	{
+		if (!chronicle.isLive() || profile == null)
+		{
+			return;
+		}
+		String json = configManager.getRSProfileConfiguration(LEDGER_GROUP, LEDGER_KEY);
+		if (json == null || json.isEmpty())
+		{
+			return;
+		}
+		try
+		{
+			if (chronicle.worth(gson.fromJson(json, LedgerWorth.class)))
+			{
+				dirty = true;
+			}
+		}
+		catch (RuntimeException e)
+		{
+			log.debug("Could not read Codex Ledger's worth", e);
+		}
+	}
+
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event)
+	{
+		if (isBank(event.getGroupId()) && chronicle.isLive() && chronicle.bank(true) != null)
+		{
+			dirty = true;
+			saveSoon = true;
+		}
+	}
+
+	@Subscribe
+	public void onWidgetClosed(WidgetClosed event)
+	{
+		if (isBank(event.getGroupId()) && chronicle.isLive())
+		{
+			chronicle.bank(false);
+		}
+	}
+
+	private static boolean isBank(int groupId)
+	{
+		return groupId == InterfaceID.BANKMAIN || groupId == InterfaceID.BANK_DEPOSITBOX;
 	}
 
 	/** The player asked to close the session now; a new one begins at once if they are in the game. */

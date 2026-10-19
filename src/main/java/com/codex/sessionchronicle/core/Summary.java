@@ -50,6 +50,12 @@ public final class Summary
 	/** Every kill line, opened loot included, for telling what the session was about. */
 	private final List<Session.KillLine> killLines;
 	private final List<Session.KillLine> realKills;
+	private final Long worthChange;
+	private final List<Trip> trips;
+	private final int tripCount;
+	private final long tripMs;
+	private final long bestTripMs;
+	private final long outFor;
 	private final List<Session.KillLine> opened;
 	private final List<Moment> moments;
 	private final List<Moment> highlights;
@@ -114,6 +120,12 @@ public final class Summary
 		List<Moment> best = new ArrayList<>(s.moments);
 		best.sort(Comparator.comparingDouble(Moment::rank).reversed().thenComparingLong(Moment::getAt));
 		highlights = Collections.unmodifiableList(best);
+		worthChange = s.worthChange();
+		trips = Collections.unmodifiableList(new ArrayList<>(s.trips == null ? Collections.emptyList() : s.trips));
+		tripCount = s.tripCount;
+		tripMs = s.tripMs;
+		bestTripMs = s.bestTripMs;
+		outFor = s.out == null ? -1 : Math.max(0, s.playedMs - s.out.from);
 		goal = s.getGoal();
 		goalProgress = goal == null ? 0 : Goal.progress(s, goal.getKind());
 	}
@@ -230,6 +242,63 @@ public final class Summary
 	public List<Session.KillLine> getKillLines()
 	{
 		return realKills;
+	}
+
+	/** The trips kept, oldest first; a filed session keeps only their totals. */
+	public List<Trip> getTrips()
+	{
+		return trips;
+	}
+
+	/** Trips that brought something home. */
+	public int getTripCount()
+	{
+		return tripCount;
+	}
+
+	/** The average trip in play time, or 0 with no trips. */
+	public long averageTripMs()
+	{
+		return tripCount <= 0 ? 0 : tripMs / tripCount;
+	}
+
+	/** The quickest trip in play time, or 0. */
+	public long getBestTripMs()
+	{
+		return bestTripMs;
+	}
+
+	/** Play time on the trip under way, or -1 at the bank. */
+	public long getOutFor()
+	{
+		return outFor;
+	}
+
+	/** Kills, loot or experience brought home per trip on average, over the trips kept. */
+	public double perTrip(Goal.Kind kind)
+	{
+		if (trips.isEmpty())
+		{
+			return 0;
+		}
+		double sum = 0;
+		for (Trip t : trips)
+		{
+			sum += kind == Goal.Kind.KILLS ? t.kills : kind == Goal.Kind.LOOT ? t.loot : t.xp;
+		}
+		return sum / trips.size();
+	}
+
+	/** How the net worth moved by Codex Ledger, or null when it is not installed or did not say. */
+	public Long getWorthChange()
+	{
+		return worthChange;
+	}
+
+	/** Net worth gained an hour, or 0 for a session too short to say. */
+	public long worthPerHour()
+	{
+		return worthChange == null ? 0 : perHour(worthChange);
 	}
 
 	/** Bird nests, crates and caskets opened, most first: loot that came without a kill. */

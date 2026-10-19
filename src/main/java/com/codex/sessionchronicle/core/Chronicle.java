@@ -291,6 +291,87 @@ public class Chronicle
 		line.lastKc = range[1];
 	}
 
+	/** Trips kept on a live session; older ones only count toward the totals. */
+	static final int MAX_TRIPS = 50;
+	/** A bank closed and opened again sooner than this, with nothing done between, is no trip. */
+	static final long MIN_TRIP_MS = 20_000;
+
+	/**
+	 * The bank opened or closed. Closing it sets out on a trip; opening it again brings the trip home,
+	 * and a trip that brought kills, loot or experience is kept.
+	 *
+	 * @return the trip just finished, or null
+	 */
+	public Trip bank(boolean open)
+	{
+		if (current == null)
+		{
+			return null;
+		}
+		Session s = current;
+		if (!open)
+		{
+			if (s.out == null)
+			{
+				s.out = new Trip(s.playedMs, 0, s.totalKills(), s.lootValue(), s.totalXp());
+			}
+			return null;
+		}
+		Trip out = s.out;
+		s.out = null;
+		if (out == null)
+		{
+			return null;
+		}
+		Trip trip = new Trip(out.from, s.playedMs, s.totalKills() - out.kills, s.lootValue() - out.loot, s.totalXp() - out.xp);
+		boolean brought = trip.kills > 0 || trip.loot > 0 || trip.xp > 0;
+		if (!brought || trip.getMs() < MIN_TRIP_MS)
+		{
+			return null;
+		}
+		s.trips.add(trip);
+		while (s.trips.size() > MAX_TRIPS)
+		{
+			s.trips.remove(0);
+		}
+		s.tripCount++;
+		s.tripMs += trip.getMs();
+		if (s.bestTripMs <= 0 || trip.getMs() < s.bestTripMs)
+		{
+			s.bestTripMs = trip.getMs();
+		}
+		return trip;
+	}
+
+	/** A session older than this when Ledger is first read takes its starting worth from Ledger's history. */
+	static final long FRESH_MS = 2 * 60_000L;
+
+	/**
+	 * Codex Ledger's worth, read again. A session just begun takes the worth as it stands for its start
+	 * (Ledger saves as the player logs out, so at login it is current); one already under way looks it up
+	 * in Ledger's history, or goes without rather than guess.
+	 *
+	 * @return true when what the session shows changed
+	 */
+	public boolean worth(LedgerWorth worth)
+	{
+		if (current == null || worth == null || !worth.isReady())
+		{
+			return false;
+		}
+		Long before = current.worthChange();
+		if (current.worthStart == null)
+		{
+			long start = current.playedMs <= FRESH_MS ? worth.getTotal() : worth.at(current.startedAt);
+			if (start > 0)
+			{
+				current.worthStart = start;
+			}
+		}
+		current.worthNow = worth.getTotal();
+		return !Objects.equals(before, current.worthChange());
+	}
+
 	/** Sets the live session's goal, or clears it with null. */
 	public void goal(Goal goal)
 	{

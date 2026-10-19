@@ -85,6 +85,25 @@ public final class Format
 		return minutes / 60 + "h " + minutes % 60 + "m";
 	}
 
+	/** "11:20" for a trip, or "1:02:10" past the hour. */
+	public static String lap(long ms)
+	{
+		long seconds = Math.max(0, ms) / 1000;
+		long hours = seconds / 3600;
+		String rest = String.format(Locale.ENGLISH, "%02d", seconds % 60);
+		if (hours > 0)
+		{
+			return hours + ":" + String.format(Locale.ENGLISH, "%02d", seconds / 60 % 60) + ":" + rest;
+		}
+		return seconds / 60 + ":" + rest;
+	}
+
+	/** "+3.2M" or "-450k". */
+	public static String signedCoins(long gp)
+	{
+		return gp > 0 ? "+" + amount(gp) : gp < 0 ? "-" + amount(-gp) : "0";
+	}
+
 	/** "1:42" for a session clock. */
 	public static String clock(long ms)
 	{

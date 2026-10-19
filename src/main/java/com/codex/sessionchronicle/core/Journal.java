@@ -66,6 +66,12 @@ public final class Journal
 		c.player = s.player;
 		c.deaths = s.deaths;
 		c.goal = s.getGoal();
+		c.worthStart = s.worthStart;
+		c.worthNow = s.worthNow;
+		// The journal keeps what the trips came to, not each trip.
+		c.tripCount = s.tripCount;
+		c.tripMs = s.tripMs;
+		c.bestTripMs = s.bestTripMs;
 		for (Map.Entry<String, Session.SkillLine> e : s.skills.entrySet())
 		{
 			if (e.getValue().gained() > 0)

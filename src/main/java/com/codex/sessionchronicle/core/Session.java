@@ -28,6 +28,20 @@ public class Session
 	int otherDrops;
 	/** What the player set out to do this session, or null. */
 	Goal goal;
+	/** Trips out from the bank and back, oldest first; the newest are kept while it is lived. */
+	List<Trip> trips = new ArrayList<>();
+	/** The trip under way: where its play time, kills, loot and experience stood as it set out; null at the bank. */
+	Trip out;
+	/** Trips taken and their play time in all, kept when the journal drops the list. */
+	int tripCount;
+	long tripMs;
+	/** The quickest trip that brought something back, in play time, or 0. */
+	long bestTripMs;
+
+	/** Net worth by Codex Ledger as the session began, or null when it is not known. */
+	Long worthStart;
+	/** Net worth by Codex Ledger as last read during the session, or null. */
+	Long worthNow;
 
 	Session()
 	{
@@ -80,6 +94,12 @@ public class Session
 	public Goal getGoal()
 	{
 		return goal == null || !goal.isValid() ? null : goal;
+	}
+
+	/** How much the net worth moved over the session by Codex Ledger, or null when Ledger did not say. */
+	public Long worthChange()
+	{
+		return worthStart == null || worthNow == null ? null : worthNow - worthStart;
 	}
 
 	public long totalXp()
