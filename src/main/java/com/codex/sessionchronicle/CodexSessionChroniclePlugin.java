@@ -15,6 +15,7 @@ import com.codex.sessionchronicle.overlay.SessionTicker;
 import com.codex.sessionchronicle.ui.CardActions;
 import com.codex.sessionchronicle.ui.ChroniclePanel;
 import com.codex.sessionchronicle.ui.Format;
+import com.codex.sessionchronicle.ui.IconWatch;
 import com.codex.sessionchronicle.ui.Icons;
 import com.codex.sessionchronicle.ui.SessionActions;
 import com.codex.sessionchronicle.ui.ItemIcons;
@@ -156,12 +157,19 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private final Chronicle chronicle = new Chronicle();
 	private final SessionTicker ticker = new SessionTicker();
 
+	/** Hands each item picture's load callback over only until it arrives. */
+	private final IconWatch iconWatch = new IconWatch();
 	private ChroniclePanel panel;
 	private NavigationButton navButton;
 	private ScheduledFuture<?> expiry;
 	/** Wakes the panel at local midnight, so Today and the week roll over even while logged out. */
 	private ScheduledFuture<?> midnight;
-	private volatile boolean running;
+	/**
+	 * Counts starts and stops. A midnight wake-up belongs to the start that set it and does nothing,
+	 * not even set the next one, once the plugin has stopped or started again, so a wake-up already
+	 * running at a stop cannot leave a second chain of them behind.
+	 */
+	private final java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
 	/** The local day the panel was last given, as an epoch day, so a missed midnight is caught too. */
 	private long publishedDay = Long.MIN_VALUE;
 	/** Codex Ledger's saved worth as last read, for the week card's worth line; null without Ledger. */
@@ -197,7 +205,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		ItemIcons items = (itemId, onLoaded) ->
 		{
 			AsyncBufferedImage image = itemManager.getImage(itemId);
-			image.onLoaded(onLoaded);
+			// Only until it arrives: a loaded picture would run the callback again on every paint.
+			iconWatch.watch(image, onLoaded, image::onLoaded);
 			return image;
 		};
 		Icons icons = name ->
@@ -267,8 +276,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		ticker.setEnabled(config.showTicker());
 		overlayManager.add(ticker);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
-		running = true;
-		scheduleMidnight();
+		scheduleMidnight(runs.incrementAndGet());
 		clientThread.invokeLater(() ->
 		{
 			loadProfile();
@@ -281,7 +289,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
-		running = false;
+		runs.incrementAndGet();
 		if (expiry != null)
 		{
 			expiry.cancel(false);
@@ -661,19 +669,19 @@ public class CodexSessionChroniclePlugin extends Plugin
 	 * Sets the next wake-up for just after local midnight. The delay is worked out afresh each day from the
 	 * zone's own calendar, so a day of 23 or 25 hours at a clock change still wakes at midnight.
 	 */
-	private void scheduleMidnight()
+	private synchronized void scheduleMidnight(int run)
 	{
-		if (!running)
+		if (runs.get() != run)
 		{
 			return;
 		}
 		long delay = Midnight.untilNext(System.currentTimeMillis(), ZoneId.systemDefault()) + Midnight.SLACK_MS;
 		midnight = executor.schedule(() ->
 		{
-			if (running)
+			if (runs.get() == run)
 			{
 				clientThread.invoke(this::publish);
-				scheduleMidnight();
+				scheduleMidnight(run);
 			}
 		}, delay, TimeUnit.MILLISECONDS);
 	}
