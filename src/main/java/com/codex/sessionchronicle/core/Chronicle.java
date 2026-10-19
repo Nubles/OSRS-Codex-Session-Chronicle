@@ -278,6 +278,40 @@ public class Chronicle
 		line.lastKc = range[1];
 	}
 
+	/** Sets the live session's goal, or clears it with null. */
+	public void goal(Goal goal)
+	{
+		if (current != null)
+		{
+			current.goal = goal;
+		}
+	}
+
+	/**
+	 * Marks the goal reached once the session gets there.
+	 *
+	 * @return the moment that tells it, once, or null
+	 */
+	public Moment checkGoal(long now)
+	{
+		Goal goal = current == null ? null : current.getGoal();
+		if (goal == null || goal.isReached() || Goal.progress(current, goal.getKind()) < goal.getTarget())
+		{
+			return null;
+		}
+		goal.reachedMs = Math.max(1, current.playedMs);
+		Moment m = new Moment(Moment.Kind.GOAL, now, "Goal reached: " + goal.describe(),
+			"After " + minutes(current.playedMs) + " of play", 0, 0);
+		add(m);
+		return m;
+	}
+
+	private static String minutes(long ms)
+	{
+		long m = Math.max(1, ms / 60_000);
+		return m >= 60 ? m / 60 + "h " + m % 60 + "m" : m + "m";
+	}
+
 	public void moment(Moment moment)
 	{
 		if (current == null || moment == null)
@@ -414,7 +448,8 @@ public class Chronicle
 		}
 		if (gp >= 1_000_000)
 		{
-			return String.format(Locale.ROOT, "%.1fM", gp / 1e6);
+			// "5M" rather than "5.0M"; "1.2M" keeps its tenth.
+			return String.format(Locale.ROOT, "%.1fM", gp / 1e6).replace(".0M", "M");
 		}
 		if (gp >= 1_000)
 		{

@@ -5,7 +5,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.EnumMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,6 +50,10 @@ public final class Summary
 	private final List<Session.KillLine> killLines;
 	private final List<Moment> moments;
 	private final List<Moment> highlights;
+	private final Goal goal;
+	private final long goalProgress;
+	private List<Pace.Line> pace = Collections.emptyList();
+	private Map<Goal.Kind, List<Goal.Preset>> presets = Collections.emptyMap();
 
 	private Summary(Session s, State state)
 	{
@@ -97,11 +103,35 @@ public final class Summary
 		List<Moment> best = new ArrayList<>(s.moments);
 		best.sort(Comparator.comparingDouble(Moment::rank).reversed().thenComparingLong(Moment::getAt));
 		highlights = Collections.unmodifiableList(best);
+		goal = s.getGoal();
+		goalProgress = goal == null ? 0 : Goal.progress(s, goal.getKind());
 	}
 
 	public static Summary of(Session session, State state)
 	{
 		return new Summary(session, state);
+	}
+
+	/**
+	 * A telling that also sets the session's pace beside the player's own earlier sessions and,
+	 * for a live session without a goal, offers goals to set.
+	 *
+	 * @param journal finished sessions; only those that began before this one are compared
+	 */
+	public static Summary of(Session session, State state, List<Session> journal)
+	{
+		Summary summary = new Summary(session, state);
+		summary.pace = Collections.unmodifiableList(Pace.of(session, journal));
+		if (state != State.ENDED && session.getGoal() == null)
+		{
+			Map<Goal.Kind, List<Goal.Preset>> offered = new EnumMap<>(Goal.Kind.class);
+			for (Goal.Kind kind : Goal.Kind.values())
+			{
+				offered.put(kind, Goal.presets(kind, session, journal));
+			}
+			summary.presets = Collections.unmodifiableMap(offered);
+		}
+		return summary;
 	}
 
 	/** A short fingerprint of everything the panel draws, to tell when a summary has really changed. */
@@ -112,7 +142,9 @@ public final class Summary
 			return "none";
 		}
 		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
-			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player;
+			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player
+			+ "/" + (s.goal == null ? "-" : s.goal.getKind() + ":" + s.goal.getTarget() + ":" + s.goal.isReached())
+			+ "/" + s.pace.size() + "/" + s.presets.size();
 	}
 
 	public State getState()
@@ -199,6 +231,55 @@ public final class Summary
 	public List<Moment> getHighlights()
 	{
 		return highlights;
+	}
+
+	/** The session's goal, or null. */
+	public Goal getGoal()
+	{
+		return goal;
+	}
+
+	/** How far the session has come toward its goal, in the goal's own unit. */
+	public long getGoalProgress()
+	{
+		return goalProgress;
+	}
+
+	/** Its pace beside the player's earlier sessions of the same kind; empty when too short or not asked for. */
+	public List<Pace.Line> getPace()
+	{
+		return pace;
+	}
+
+	/** Goals offered for each kind, for a live session that has none. */
+	public Map<Goal.Kind, List<Goal.Preset>> getPresets()
+	{
+		return presets;
+	}
+
+	/** The goal's rate of progress an hour, from the session so far; 0 before rates mean anything. */
+	public long goalPerHour()
+	{
+		if (goal == null)
+		{
+			return 0;
+		}
+		return goal.getKind() == Goal.Kind.TIME ? 3_600_000L : perHour(goalProgress);
+	}
+
+	/** Play time still needed for the goal at the session's pace so far, or -1 when it cannot be told. */
+	public long goalEtaMs()
+	{
+		long rate = goalPerHour();
+		if (goal == null || goal.isReached())
+		{
+			return 0;
+		}
+		if (rate <= 0)
+		{
+			return -1;
+		}
+		return Math.round((goal.getTarget() - goalProgress) * 3_600_000.0 / rate);
 	}
 
 	public long xpPerHour()

@@ -1,5 +1,7 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Goal;
+
 /** What the Session and Journal tabs ask of the plugin; it answers on the client thread. */
 public interface SessionActions
 {
@@ -8,4 +10,10 @@ public interface SessionActions
 
 	/** Takes the session that started at that moment out of the journal. */
 	void removeSession(long startedAt);
+
+	/** Sets the live session's goal. */
+	void setGoal(Goal.Kind kind, long target);
+
+	/** Clears the live session's goal. */
+	void clearGoal();
 }

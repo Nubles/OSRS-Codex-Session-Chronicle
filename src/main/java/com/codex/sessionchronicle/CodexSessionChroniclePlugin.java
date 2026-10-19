@@ -2,6 +2,7 @@ package com.codex.sessionchronicle;
 
 import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
+import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
@@ -208,6 +209,18 @@ public class CodexSessionChroniclePlugin extends Plugin
 			{
 				clientThread.invoke(() -> forget(startedAt));
 			}
+
+			@Override
+			public void setGoal(Goal.Kind kind, long target)
+			{
+				clientThread.invoke(() -> goal(new Goal(kind, target, System.currentTimeMillis())));
+			}
+
+			@Override
+			public void clearGoal()
+			{
+				clientThread.invoke(() -> goal(null));
+			}
 		});
 		panel.setShowName(config.nameOnCard());
 		navButton = NavigationButton.builder()
@@ -334,8 +347,18 @@ public class CodexSessionChroniclePlugin extends Plugin
 		guard();
 		chronicle.tick(now);
 		ticks++;
+		Moment reached = chronicle.checkGoal(now);
+		if (reached != null)
+		{
+			dirty = true;
+			saveSoon = true;
+			if (config.goalChat())
+			{
+				announceGoal(reached);
+			}
+		}
 		Session current = chronicle.current();
-		ticker.show(new SessionTicker.View(current.getPlayedMs(), now, true, current.totalXp(), current.lootValue()));
+		ticker.show(view(current, now, true));
 		if (saveSoon || ticks % SAVE_TICKS == 0)
 		{
 			saveCurrent();
@@ -440,6 +463,40 @@ public class CodexSessionChroniclePlugin extends Plugin
 			quietBegin = true;
 		}
 		publish();
+	}
+
+	/** Sets or clears the live session's goal; a goal already met is told at the next tick. */
+	private void goal(Goal goal)
+	{
+		if (chronicle.current() == null)
+		{
+			return;
+		}
+		chronicle.goal(goal);
+		saveCurrent();
+		publish();
+	}
+
+	private void announceGoal(Moment reached)
+	{
+		String line = new ChatMessageBuilder()
+			.append(ChatColorType.HIGHLIGHT).append("Session Chronicle: ")
+			.append(ChatColorType.HIGHLIGHT).append(reached.getTitle())
+			.append(ChatColorType.NORMAL).append(", " + reached.getDetail().toLowerCase() + ".")
+			.build();
+		chatMessageManager.queue(QueuedMessage.builder()
+			.type(ChatMessageType.CONSOLE)
+			.runeLiteFormattedMessage(line)
+			.build());
+	}
+
+	/** What the ticker draws: the clock, experience and loot, and the goal's share when one is set. */
+	private static SessionTicker.View view(Session s, long now, boolean live)
+	{
+		Goal goal = s.getGoal();
+		int share = goal == null ? -1 : goal.isReached() ? 100
+			: (int) Math.min(99, Goal.progress(s, goal.getKind()) * 100 / Math.max(1, goal.getTarget()));
+		return new SessionTicker.View(s.getPlayedMs(), now, live, s.totalXp(), s.lootValue(), share);
 	}
 
 	/** Takes one session out of the journal. */
@@ -601,6 +658,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 
 	private void file(Session closed)
 	{
+		Journal.markRecords(closed, journal);
 		journal = Journal.file(journal, closed, config.journalSize());
 		summarisePast();
 		storeJournal();
@@ -619,7 +677,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		List<Summary> list = new ArrayList<>();
 		for (Session s : journal)
 		{
-			list.add(Summary.of(s, Summary.State.ENDED));
+			// Each filed session's pace is set beside the sessions before it, as it stood then.
+			list.add(Summary.of(s, Summary.State.ENDED, journal));
 		}
 		pastSummaries = Collections.unmodifiableList(list);
 	}
@@ -652,12 +711,25 @@ public class CodexSessionChroniclePlugin extends Plugin
 			.append(ChatColorType.HIGHLIGHT).append(Format.xp(last.totalXp()) + " xp")
 			.append(ChatColorType.NORMAL).append(" and ")
 			.append(ChatColorType.HIGHLIGHT).append(Format.coins(last.lootValue()) + " loot")
-			.append(ChatColorType.NORMAL).append(".")
+			.append(ChatColorType.NORMAL).append(records(last))
 			.build();
 		chatMessageManager.queue(QueuedMessage.builder()
 			.type(ChatMessageType.CONSOLE)
 			.runeLiteFormattedMessage(line)
 			.build());
+	}
+
+	/** ", and a new record: Mining record: 212k xp/hr." or a plain full stop. */
+	private static String records(Session last)
+	{
+		for (Moment m : last.getMoments())
+		{
+			if (m.getKind() == Moment.Kind.RECORD)
+			{
+				return ", and a new personal record: " + m.getTitle() + ".";
+			}
+		}
+		return ".";
 	}
 
 	/** Sends the panel a copy of the chronicle, so Swing never reads what the client thread is writing. */
@@ -673,8 +745,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 			snapshot = json;
 			snapshotProfile = profile;
 			copy = gson.fromJson(json, Session.class);
-			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED);
-			ticker.show(new SessionTicker.View(copy.getPlayedMs(), System.currentTimeMillis(), chronicle.isLive(), copy.totalXp(), copy.lootValue()));
+			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED, journal);
+			ticker.show(view(copy, System.currentTimeMillis(), chronicle.isLive()));
 		}
 		else
 		{

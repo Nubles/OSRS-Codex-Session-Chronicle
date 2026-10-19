@@ -5,6 +5,7 @@ import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ final class JournalView
 {
 	static final String[] METRICS = {"Experience", "Loot", "Time"};
 	private static final int CHART = 14;
+	private static final int RECORDS = 6;
 
 	private JournalView()
 	{
@@ -37,8 +39,10 @@ final class JournalView
 		tiles.add(new StatTile(Format.duration(records.getWeekPlayedMs()).replace("under a minute", "0m"), "This week",
 			records.getWeekSessions() + (records.getWeekSessions() == 1 ? " session" : " sessions"), Theme.TEAL));
 		int streak = records.getStreakDays();
-		tiles.add(new StatTile(streak == 0 ? "-" : streak + (streak == 1 ? " day" : " days"), "Streak",
-			streak > 1 ? "in a row" : streak == 1 ? "play tomorrow too" : "no play yesterday", Theme.EMBER));
+		int longest = records.getLongestStreak();
+		String streakNote = streak > 1 && streak >= longest ? "your longest yet" : longest > Math.max(1, streak) ? "best " + longest + " days"
+			: streak == 1 ? "play tomorrow too" : "no play yesterday";
+		tiles.add(new StatTile(streak == 0 ? "-" : streak + (streak == 1 ? " day" : " days"), "Streak", streakNote, Theme.EMBER));
 		Session xp = records.getMostXp();
 		tiles.add(new StatTile(xp == null ? "-" : Format.xp(xp.totalXp()), "Most XP", xp == null ? "" : Format.day(xp.getStartedAt()), Theme.XP));
 		Session loot = records.getMostLoot();
@@ -67,6 +71,16 @@ final class JournalView
 		Color color = metric == 0 ? Theme.XP : metric == 1 ? Theme.LOOT : Theme.EMBER;
 		stack.add(new BarChart(bars, color, index -> open.accept(count - 1 - index)));
 
+		List<Journal.Best> bests = records.getBests();
+		if (!bests.isEmpty())
+		{
+			stack.add(new SectionHeader("Personal records", "fastest"));
+			for (int i = 0; i < bests.size() && i < RECORDS; i++)
+			{
+				stack.add(best(bests.get(i)));
+			}
+		}
+
 		stack.add(new SectionHeader("Sessions", String.valueOf(sessions.size())));
 		for (int i = 0; i < sessions.size(); i++)
 		{
@@ -74,6 +88,28 @@ final class JournalView
 			stack.add(row(sessions.get(i)).onClick(() -> open.accept(index)));
 		}
 		return stack;
+	}
+
+	/** One personal best: the skill or monster, how fast, and the day it was set. */
+	private static Card best(Journal.Best b)
+	{
+		Card card = new Card(new BorderLayout(6, 0));
+		card.setBorder(new EmptyBorder(5, 10, 5, 10));
+		card.accent(PaceRow.color(b.getKind()));
+		JPanel text = new JPanel(new BorderLayout());
+		text.setOpaque(false);
+		JLabel name = Ui.label(b.getName(), Theme.body(), Theme.TEXT);
+		name.setMinimumSize(new Dimension(10, 10));
+		name.setPreferredSize(new Dimension(10, name.getPreferredSize().height));
+		text.add(name, BorderLayout.NORTH);
+		text.add(Ui.label(Format.day(b.getAt()), Theme.small(), Theme.TEXT_FAINT), BorderLayout.SOUTH);
+		card.add(text, BorderLayout.CENTER);
+		JPanel holder = new JPanel(new BorderLayout());
+		holder.setOpaque(false);
+		holder.add(Ui.label(PaceRow.rate(b.getRate(), b.getKind()), Theme.body(), PaceRow.color(b.getKind())), BorderLayout.NORTH);
+		card.add(holder, BorderLayout.EAST);
+		card.setToolTipText(b.getName() + ": " + PaceRow.rate(b.getRate(), b.getKind()) + ", the fastest in a session of 15 minutes or more");
+		return card;
 	}
 
 	private static Card row(Summary s)

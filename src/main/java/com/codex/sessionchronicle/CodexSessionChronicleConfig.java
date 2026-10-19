@@ -90,10 +90,22 @@ public interface CodexSessionChronicleConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "goalChat",
+		name = "Goal reached in chat",
+		description = "Put a line in the chat box when the session reaches the goal you set for it",
+		position = 3,
+		section = display
+	)
+	default boolean goalChat()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "nameOnCard",
 		name = "Name on card",
 		description = "Write your character's name on the session card",
-		position = 2,
+		position = 4,
 		section = display
 	)
 	default boolean nameOnCard()

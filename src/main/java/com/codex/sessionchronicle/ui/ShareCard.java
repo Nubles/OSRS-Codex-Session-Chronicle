@@ -1,6 +1,8 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BasicStroke;
@@ -31,6 +33,7 @@ public final class ShareCard
 	private static final int COLUMNS = 8;
 	private static final int KILLS = 4;
 	private static final int HIGHLIGHTS = 3;
+	private static final int PACE = 2;
 
 	private ShareCard()
 	{
@@ -171,6 +174,33 @@ public final class ShareCard
 		}
 		y += tileH + 12;
 
+		Goal goal = s.getGoal();
+		if (goal != null)
+		{
+			y = goal(g, s, goal, x, y, w) + 12;
+		}
+
+		List<Pace.Line> pace = new ArrayList<>();
+		for (Pace.Line line : s.getPace())
+		{
+			// Only a comparison is worth telling; a first session of its kind has none.
+			if (line.getSamples() > 0 && pace.size() < PACE)
+			{
+				pace.add(line);
+			}
+		}
+		if (!pace.isEmpty())
+		{
+			header(g, "Pace", "vs my past sessions", x, y, w);
+			y += 24;
+			for (Pace.Line line : pace)
+			{
+				PaceRow.paint(g, line, x, y, w);
+				y += PaceRow.HEIGHT + 2;
+			}
+			y += 4;
+		}
+
 		List<Session.SkillLine> skillLines = s.getSkills();
 		if (!skillLines.isEmpty())
 		{
@@ -265,6 +295,39 @@ public final class ShareCard
 		g.drawString(deaths, x + w - small.stringWidth(deaths), y + small.getAscent());
 		y += small.getHeight();
 		return y + PAD;
+	}
+
+	/** A ribbon with the session's goal and how far it went; returns the y below it. */
+	private static int goal(Graphics2D g, Summary s, Goal goal, int x, int y, int w)
+	{
+		boolean done = goal.isReached();
+		int h = 34;
+		RoundRectangle2D box = new RoundRectangle2D.Float(x + 0.5f, y + 0.5f, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+		g.setPaint(new GradientPaint(x, y, Theme.CARD_TOP, x, y + h, Theme.CARD));
+		g.fill(box);
+		g.setColor(Theme.alpha(done ? Theme.TEAL : Theme.GOLD, 140));
+		g.draw(box);
+		g.setFont(Theme.small());
+		FontMetrics small = g.getFontMetrics();
+		String tag = done ? "GOAL REACHED" : "GOAL";
+		g.setColor(done ? Theme.TEAL : Theme.GOLD);
+		g.drawString(tag, x + 9, y + 6 + small.getAscent());
+		double share = GoalView.share(s, goal);
+		String pct = Math.round(share * 100) + "%";
+		g.setColor(Theme.progressColor(share));
+		g.drawString(pct, x + w - 9 - small.stringWidth(pct), y + 6 + small.getAscent());
+		g.setFont(Theme.body());
+		FontMetrics fm = g.getFontMetrics();
+		String what = goal.describe() + (done ? ", in " + Format.duration(goal.getReachedMs()) : "");
+		int tx = x + 9 + small.stringWidth(tag) + 8;
+		Ui.shadowed(g, Ui.clip(what, fm, x + w - 9 - small.stringWidth(pct) - 8 - tx), tx, y + 6 + small.getAscent(), Theme.TEXT);
+		int by = y + h - 10;
+		g.setColor(Theme.INK_DEEP);
+		g.fill(new RoundRectangle2D.Float(x + 9, by, w - 18, 4, 4, 4));
+		g.setPaint(new GradientPaint(x + 9, 0, done ? Theme.GREEN : Theme.progressColor(0), x + w - 9, 0,
+			done ? Theme.GREEN : Theme.progressColor(1)));
+		g.fill(new RoundRectangle2D.Float(x + 9, by, (float) Math.max(4, (w - 18) * share), 4, 4, 4));
+		return y + h;
 	}
 
 	/** "Ranged 99": the skill that rose the most, for the levels tile. */

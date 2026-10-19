@@ -1,12 +1,15 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.function.BiConsumer;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -30,6 +33,17 @@ final class SessionView
 	 * @param end closes the live session now; null for an older one
 	 */
 	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end)
+	{
+		return build(s, items, icons, backToLive, remove, end, null, null, null);
+	}
+
+	/**
+	 * @param goalKinds the strip that picks which kind of goal to offer
+	 * @param setGoal sets a goal on the live session; null for an older one
+	 * @param clearGoal clears the live session's goal; null for an older one
+	 */
+	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end,
+		Segmented goalKinds, BiConsumer<Goal.Kind, Long> setGoal, Runnable clearGoal)
 	{
 		StackPanel stack = new StackPanel(8, 8);
 		if (backToLive != null)
@@ -81,6 +95,22 @@ final class SessionView
 		List<Session.KillLine> killLines = s.getKillLines();
 		tiles.add(new StatTile(String.valueOf(s.getKills()), "Kills", killLines.isEmpty() ? "" : killLines.get(0).getName(), Theme.KILLS));
 		stack.add(tiles);
+
+		JComponent goal = goalKinds == null && s.getGoal() == null ? null : GoalView.build(s, goalKinds, setGoal, clearGoal);
+		if (goal != null)
+		{
+			stack.add(goal);
+		}
+
+		List<Pace.Line> pace = s.getPace();
+		if (!pace.isEmpty())
+		{
+			stack.add(new SectionHeader("Pace", "vs your past"));
+			for (Pace.Line line : pace)
+			{
+				stack.add(new PaceRow(line));
+			}
+		}
 
 		List<Session.SkillLine> skills = s.getSkills();
 		if (!skills.isEmpty())

@@ -13,7 +13,11 @@ public class Moment
 		QUEST(60),
 		DIARY(55),
 		BEST(50),
+		/** A personal record of the player's own, such as their fastest Mining session. */
+		RECORD(45),
 		TASK(40),
+		/** The goal the player set for the session, reached. */
+		GOAL(35),
 		LEVEL(30),
 		CLUE(20),
 		DEATH(10);

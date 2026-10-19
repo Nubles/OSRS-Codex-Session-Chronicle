@@ -28,9 +28,17 @@ public class SessionTicker extends Overlay
 		final boolean live;
 		final long xp;
 		final long loot;
+		/** The goal's share in percent, or -1 without a goal. */
+		final int goal;
 
 		public View(long playedMs, long at, boolean live, long xp, long loot)
 		{
+			this(playedMs, at, live, xp, loot, -1);
+		}
+
+		public View(long playedMs, long at, boolean live, long xp, long loot, int goal)
+		{
+			this.goal = goal;
 			this.playedMs = playedMs;
 			this.at = at;
 			this.live = live;
@@ -70,6 +78,7 @@ public class SessionTicker extends Overlay
 		String clock = Format.clock(played);
 		String xp = Format.xp(v.xp) + " xp";
 		String loot = Format.coins(v.loot) + " gp";
+		String goal = v.goal < 0 ? "" : v.goal >= 100 ? "goal met" : "goal " + v.goal + "%";
 
 		g.setFont(Theme.title());
 		FontMetrics bold = g.getFontMetrics();
@@ -77,7 +86,8 @@ public class SessionTicker extends Overlay
 		FontMetrics small = g.getFontMetrics();
 		int icon = 14;
 		int gap = 10;
-		int width = PAD + icon + 6 + bold.stringWidth(clock) + gap + small.stringWidth(xp) + gap + small.stringWidth(loot) + PAD;
+		int width = PAD + icon + 6 + bold.stringWidth(clock) + gap + small.stringWidth(xp) + gap + small.stringWidth(loot) + PAD
+			+ (goal.isEmpty() ? 0 : gap + small.stringWidth(goal));
 		int height = Math.max(icon, bold.getHeight()) + PAD;
 
 		RoundRectangle2D shape = new RoundRectangle2D.Float(0.5f, 0.5f, width - 1, height - 1, 10, 10);
@@ -97,6 +107,11 @@ public class SessionTicker extends Overlay
 		Ui.shadowed(g, xp, x, base, Theme.XP);
 		x += small.stringWidth(xp) + gap;
 		Ui.shadowed(g, loot, x, base, Theme.LOOT);
+		if (!goal.isEmpty())
+		{
+			x += small.stringWidth(loot) + gap;
+			Ui.shadowed(g, goal, x, base, v.goal >= 100 ? Theme.GREEN : Theme.GOLD_BRIGHT);
+		}
 		return new Dimension(width, height);
 	}
 }

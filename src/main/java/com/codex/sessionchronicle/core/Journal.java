@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -64,6 +65,7 @@ public final class Journal
 		c.playedMs = s.playedMs;
 		c.player = s.player;
 		c.deaths = s.deaths;
+		c.goal = s.getGoal();
 		for (Map.Entry<String, Session.SkillLine> e : s.skills.entrySet())
 		{
 			if (e.getValue().gained() > 0)
@@ -107,6 +109,111 @@ public final class Journal
 		return c;
 	}
 
+	/**
+	 * Marks the personal records a finished session set against the sessions before it: its main
+	 * skill's or monster's fastest rate, the most loot or experience in one session. A record
+	 * needs an earlier session to beat, so the first trip anywhere is never one.
+	 *
+	 * @return the record moments added, at most three
+	 */
+	public static List<Moment> markRecords(Session s, List<Session> journal)
+	{
+		List<Moment> marked = new ArrayList<>();
+		if (s == null || s.playedMs < Pace.MIN_PLAYED_MS)
+		{
+			return marked;
+		}
+		for (Moment m : s.moments)
+		{
+			if (m.getKind() == Moment.Kind.RECORD)
+			{
+				// Already marked when it was filed once before.
+				return marked;
+			}
+		}
+		long at = s.endedAt > 0 ? s.endedAt : s.lastSeenAt;
+		for (Pace.Line line : Pace.of(s, journal))
+		{
+			if (line.getKind() == Pace.Kind.LOOT || !line.isRecord())
+			{
+				continue;
+			}
+			String unit = line.getKind() == Pace.Kind.SKILL ? " xp/hr" : " kills/hr";
+			marked.add(new Moment(Moment.Kind.RECORD, at, line.getName() + " record: " + Chronicle.amount(line.getRate()) + unit,
+				"Your best was " + Chronicle.amount(line.getBest()) + unit, 0, 0));
+		}
+		long mostLoot = 0;
+		long mostXp = 0;
+		boolean earlierLoot = false;
+		boolean earlierXp = false;
+		for (Session past : journal)
+		{
+			if (past == null || past.startedAt >= s.startedAt)
+			{
+				continue;
+			}
+			earlierLoot |= past.lootValue() > 0;
+			earlierXp |= past.totalXp() > 0;
+			mostLoot = Math.max(mostLoot, past.lootValue());
+			mostXp = Math.max(mostXp, past.totalXp());
+		}
+		if (earlierLoot && s.lootValue() > mostLoot)
+		{
+			marked.add(new Moment(Moment.Kind.RECORD, at, "Richest session yet", Chronicle.coins(s.lootValue()) + " of loot, beating "
+				+ Chronicle.coins(mostLoot), 0, 0));
+		}
+		if (earlierXp && s.totalXp() > mostXp)
+		{
+			marked.add(new Moment(Moment.Kind.RECORD, at, "Most experience yet", Chronicle.amount(s.totalXp()) + " xp, beating "
+				+ Chronicle.amount(mostXp), 0, 0));
+		}
+		while (marked.size() > 3)
+		{
+			marked.remove(marked.size() - 1);
+		}
+		s.moments.addAll(marked);
+		return marked;
+	}
+
+	/** One personal best: the fastest a skill was trained or a monster killed, in a session long enough to count. */
+	public static final class Best
+	{
+		private final Pace.Kind kind;
+		private final String name;
+		private final long rate;
+		private final long at;
+
+		Best(Pace.Kind kind, String name, long rate, long at)
+		{
+			this.kind = kind;
+			this.name = name;
+			this.rate = rate;
+			this.at = at;
+		}
+
+		public Pace.Kind getKind()
+		{
+			return kind;
+		}
+
+		public String getName()
+		{
+			return name;
+		}
+
+		/** Experience or kills an hour. */
+		public long getRate()
+		{
+			return rate;
+		}
+
+		/** When the session that set it began. */
+		public long getAt()
+		{
+			return at;
+		}
+	}
+
 	/** The journal's records and recent rhythm. */
 	public static final class Records
 	{
@@ -116,6 +223,8 @@ public final class Journal
 		private long weekPlayedMs;
 		private int weekSessions;
 		private int streakDays;
+		private int longestStreak;
+		private List<Best> bests = new ArrayList<>();
 
 		public Session getMostXp()
 		{
@@ -147,6 +256,18 @@ public final class Journal
 		{
 			return streakDays;
 		}
+
+		/** The most days in a row ever played, as far back as the journal goes. */
+		public int getLongestStreak()
+		{
+			return longestStreak;
+		}
+
+		/** The fastest each main skill and monster has gone, the most recently set first. */
+		public List<Best> getBests()
+		{
+			return bests;
+		}
 	}
 
 	/**
@@ -161,8 +282,25 @@ public final class Journal
 		}
 		Records r = new Records();
 		Set<LocalDate> days = new HashSet<>();
+		Map<String, Best> bests = new LinkedHashMap<>();
 		for (Session s : all)
 		{
+			if (s.playedMs >= Pace.MIN_PLAYED_MS)
+			{
+				for (Pace.Line line : Pace.of(s, Collections.emptyList()))
+				{
+					if (line.getKind() == Pace.Kind.LOOT)
+					{
+						continue;
+					}
+					String key = line.getKind() + ":" + (line.getKind() == Pace.Kind.KILLS ? Chronicle.key(line.getName()) : line.getName());
+					Best held = bests.get(key);
+					if (held == null || line.getRate() > held.rate)
+					{
+						bests.put(key, new Best(line.getKind(), line.getName(), line.getRate(), s.startedAt));
+					}
+				}
+			}
 			if (r.mostXp == null || s.totalXp() > r.mostXp.totalXp())
 			{
 				r.mostXp = s;
@@ -200,6 +338,21 @@ public final class Journal
 			r.streakDays++;
 			day = day.minusDays(1);
 		}
+		for (LocalDate d : days)
+		{
+			if (days.contains(d.minusDays(1)))
+			{
+				continue;
+			}
+			int run = 0;
+			while (days.contains(d.plusDays(run)))
+			{
+				run++;
+			}
+			r.longestStreak = Math.max(r.longestStreak, run);
+		}
+		r.bests = new ArrayList<>(bests.values());
+		r.bests.sort(Comparator.comparingLong(Best::getAt).reversed());
 		return r;
 	}
 }

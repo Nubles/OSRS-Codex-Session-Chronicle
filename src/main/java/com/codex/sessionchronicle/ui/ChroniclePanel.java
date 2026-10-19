@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.ui;
 
 import com.codex.sessionchronicle.core.Journal;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
@@ -34,6 +35,7 @@ public class ChroniclePanel extends PluginPanel
 	private final Crest crest = new Crest();
 	private final Segmented tabs = new Segmented(true, "Session", "Journal", "Card");
 	private final Segmented metrics = new Segmented(false, JournalView.METRICS);
+	private final Segmented goalKinds = new Segmented(false, GoalView.KINDS);
 	private final CardLayout cards = new CardLayout();
 	private final JPanel content = new JPanel(cards);
 	private final JScrollPane session = scroller();
@@ -83,6 +85,7 @@ public class ChroniclePanel extends PluginPanel
 
 		tabs.onChange(this::showTab);
 		metrics.onChange(i -> rebuildJournal());
+		goalKinds.onChange(i -> rebuildSession(true));
 		rebuild();
 	}
 
@@ -171,7 +174,8 @@ public class ChroniclePanel extends PluginPanel
 		}
 		sessionDrawn = drawn;
 		replace(session, open >= 0 ? SessionView.build(s, items, icons, this::backToLive, this::removeOpen, null)
-			: SessionView.build(s, items, icons, null, null, sessionActions::endSession));
+			: SessionView.build(s, items, icons, null, null, sessionActions::endSession, goalKinds, sessionActions::setGoal,
+				sessionActions::clearGoal));
 	}
 
 	private void removeOpen()
@@ -265,7 +269,9 @@ public class ChroniclePanel extends PluginPanel
 		// The card is a large picture; only paint it again when the session on it has moved on.
 		String drawn = s == null ? "none" : showName + "/" + s.getState() + "/" + s.getStartedAt() + "/" + s.getPlayedMs() / 60_000
 			+ "/" + Format.xp(s.getTotalXp()) + "/" + Format.coins(s.getLootValue()) + "/" + s.getKills() + "/" + s.getLevels()
-			+ "/" + s.getMoments().size() + "/" + s.getDrops().size() + "/" + s.getDeaths() + "/" + open;
+			+ "/" + s.getMoments().size() + "/" + s.getDrops().size() + "/" + s.getDeaths() + "/" + open
+			+ "/" + (s.getGoal() == null ? "-" : s.getGoal().describe() + s.getGoal().isReached() + Math.round(GoalView.share(s, s.getGoal()) * 100))
+			+ "/" + paceKey(s);
 		if (!force && drawn.equals(cardDrawn))
 		{
 			return;
@@ -291,6 +297,17 @@ public class ChroniclePanel extends PluginPanel
 		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste.";
 		stack.add(Ui.wrapped(note, Theme.small(), cardNote != null ? Theme.TEAL : Theme.TEXT_FAINT, SessionView.WIDTH - 10));
 		replace(card, stack);
+	}
+
+	/** The pace lines as the card shows them, rounded so a moving rate does not repaint it every refresh. */
+	private static String paceKey(Summary s)
+	{
+		StringBuilder key = new StringBuilder();
+		for (Pace.Line line : s.getPace())
+		{
+			key.append(Format.amount(line.getRate())).append(',');
+		}
+		return key.toString();
 	}
 
 	private boolean refreshPending;

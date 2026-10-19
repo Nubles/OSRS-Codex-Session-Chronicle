@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.core;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,8 @@ public class Session
 	/** Loot trimmed from the session when it was filed in the journal, so the totals still add up. */
 	long otherLoot;
 	int otherDrops;
+	/** What the player set out to do this session, or null. */
+	Goal goal;
 
 	Session()
 	{
@@ -64,6 +67,18 @@ public class Session
 	public int getDeaths()
 	{
 		return deaths;
+	}
+
+	/** The session's moments in the order they were added. */
+	public List<Moment> getMoments()
+	{
+		return Collections.unmodifiableList(moments);
+	}
+
+	/** The session's goal, or null when none was set (or a saved one is unusable). */
+	public Goal getGoal()
+	{
+		return goal == null || !goal.isValid() ? null : goal;
 	}
 
 	public long totalXp()
