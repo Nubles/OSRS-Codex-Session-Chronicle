@@ -19,7 +19,7 @@ public class Crest extends JPanel
 {
 	private final SessionClock clock = new SessionClock(74);
 	private final JLabel title = Ui.label("Session Chronicle", Theme.title(), Theme.GOLD_BRIGHT);
-	private final JLabel subtitle = Ui.label("Log in to begin a session", Theme.small(), Theme.TEXT_MUTED);
+	private final JLabel subtitle = Ui.label("Log in to begin", Theme.small(), Theme.TEXT_MUTED);
 	private final Ledger xp = new Ledger("Experience");
 	private final Ledger loot = new Ledger("Loot");
 	private final Ledger kills = new Ledger("Kills");
@@ -61,7 +61,7 @@ public class Crest extends JPanel
 		title.setText(playerName != null ? playerName : s != null && s.getPlayer() != null ? s.getPlayer() : "Session Chronicle");
 		if (s == null)
 		{
-			subtitle.setText(playerName == null ? "Log in to begin a session" : "Beginning your session...");
+			subtitle.setText(playerName == null ? "Log in to begin" : "Beginning your session...");
 			subtitle.setForeground(Theme.TEXT_MUTED);
 			clock.set(0, "", Theme.TEXT_MUTED, false);
 			xp.set("-", Theme.TEXT);
@@ -95,7 +95,7 @@ public class Crest extends JPanel
 		clock.set(s.getPlayedMs(), caption, state, true);
 		xp.set(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "-", Theme.XP);
 		loot.set(s.getLootValue() > 0 ? Format.coins(s.getLootValue()) : "-", Theme.LOOT);
-		kills.set(s.getKills() > 0 ? String.valueOf(s.getKills()) : "-", Theme.KILLS);
+		kills.set(s.getKills() > 0 ? Format.count(s.getKills()) : "-", Theme.KILLS);
 		glow = Theme.mix(Theme.GOLD_DIM, state, 0.3);
 		repaint();
 	}

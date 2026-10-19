@@ -141,6 +141,12 @@ public final class Format
 		return FILE.format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()));
 	}
 
+	/** A count with thousands marked, as the game's own kill counts are: "1,394". */
+	public static String count(long n)
+	{
+		return String.format(Locale.ENGLISH, "%,d", n);
+	}
+
 	/** An item stack the way the game writes it: "950", "45K", "12M". */
 	public static String stack(long n)
 	{

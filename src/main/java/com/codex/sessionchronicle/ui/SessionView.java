@@ -75,7 +75,8 @@ final class SessionView
 		JPanel lines = new JPanel();
 		lines.setOpaque(false);
 		lines.setLayout(new BoxLayout(lines, BoxLayout.Y_AXIS));
-		JLabel headline = Ui.label(s.headline(), Theme.title(), Theme.GOLD_BRIGHT);
+		// The headline is the session's name; a long one wraps rather than losing its end.
+		JLabel headline = Ui.wrapped(s.headline(), Theme.title(), Theme.GOLD_BRIGHT, WIDTH - 22);
 		lines.add(headline);
 		lines.add(Ui.label(Format.duration(s.getPlayedMs()) + " played, " + Format.time(s.getStartedAt()) + " to "
 			+ (s.getState() == Summary.State.LIVE ? "now" : Format.time(s.getEndedAt())), Theme.small(), Theme.TEXT_MUTED));
@@ -84,8 +85,9 @@ final class SessionView
 
 		JPanel tiles = new JPanel(new GridLayout(2, 2, 6, 6));
 		tiles.setOpaque(false);
-		tiles.add(new StatTile(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()), Theme.XP));
-		tiles.add(new StatTile(Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), Theme.LOOT));
+		tiles.add(new StatTile(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()),
+			s.getTotalXp() > 0 ? Theme.XP : Theme.TEXT_MUTED));
+		tiles.add(new StatTile(Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), s.getLootValue() > 0 ? Theme.LOOT : Theme.TEXT_MUTED));
 		Session.SkillLine levelled = null;
 		for (Session.SkillLine line : s.getSkills())
 		{
@@ -94,9 +96,11 @@ final class SessionView
 				levelled = line;
 			}
 		}
-		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "none this time" : levelled.getSkill() + " " + levelled.getLevel(), Theme.GREEN));
+		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "none this time" : levelled.getSkill() + " " + levelled.getLevel(),
+			s.getLevels() > 0 ? Theme.GREEN : Theme.TEXT_MUTED));
 		List<Session.KillLine> killLines = s.getKillLines();
-		tiles.add(new StatTile(String.valueOf(s.getKills()), "Kills", killLines.isEmpty() ? "" : killLines.get(0).getName(), Theme.KILLS));
+		tiles.add(new StatTile(Format.count(s.getKills()), "Kills", killLines.isEmpty() ? "none this time" : killLines.get(0).getName(),
+			s.getKills() > 0 ? Theme.KILLS : Theme.TEXT_MUTED));
 		stack.add(tiles);
 
 		JComponent worth = worth(s);
@@ -156,7 +160,7 @@ final class SessionView
 
 		if (!killLines.isEmpty())
 		{
-			stack.add(new SectionHeader("Kills", String.valueOf(s.getKills())));
+			stack.add(new SectionHeader("Kills", Format.count(s.getKills())));
 			int top = killLines.get(0).count();
 			for (int i = 0; i < killLines.size() && i < KILLS; i++)
 			{

@@ -6,7 +6,6 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.geom.Path2D;
-import java.util.Locale;
 import javax.swing.JComponent;
 
 /** One monster, raid or chest: how many this session and the game's kill count after them. */
@@ -32,6 +31,36 @@ class KillRow extends JComponent
 		g.dispose();
 	}
 
+	/** True when every one of these names fits whole in a row of that width. */
+	static boolean fits(Graphics2D g, java.util.List<Session.KillLine> lines, int w)
+	{
+		for (Session.KillLine line : lines)
+		{
+			if (!Ui.clip(line.getName(), g.getFontMetrics(Theme.body()), nameWidth(g, line, w)).equals(line.getName()))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static String countText(Session.KillLine line)
+	{
+		return "x" + Format.count(line.count());
+	}
+
+	private static String kcText(Session.KillLine line)
+	{
+		return line.getKillCount() > 0 ? "KC " + Format.count(line.getKillCount()) : "";
+	}
+
+	private static int nameWidth(Graphics2D g, Session.KillLine line, int w)
+	{
+		String kc = kcText(line);
+		int kcw = kc.isEmpty() ? 0 : g.getFontMetrics(Theme.small()).stringWidth(kc) + 8;
+		return w - kcw - g.getFontMetrics(Theme.body()).stringWidth(countText(line)) - 18;
+	}
+
 	static void paint(Graphics2D g, Session.KillLine line, double share, int x, int y, int w)
 	{
 		g.setFont(Theme.body());
@@ -47,8 +76,8 @@ class KillRow extends JComponent
 		g.setColor(Theme.mix(Theme.GOLD_DIM, Theme.KILLS, Math.max(0.2, share)));
 		g.fill(mark);
 
-		String count = "x" + line.count();
-		String kc = line.getKillCount() > 0 ? "KC " + String.format(Locale.ENGLISH, "%,d", line.getKillCount()) : "";
+		String count = countText(line);
+		String kc = kcText(line);
 		g.setFont(Theme.small());
 		FontMetrics small = g.getFontMetrics();
 		int kcw = kc.isEmpty() ? 0 : small.stringWidth(kc) + 8;

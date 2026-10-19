@@ -33,9 +33,17 @@ class MomentRow extends JComponent
 		this.first = first;
 		this.last = last;
 		setOpaque(false);
-		setPreferredSize(new Dimension(10, HEIGHT));
 		String detail = moment.getDetail();
+		// A long detail, such as where a drop came from and its worth, takes a second line rather than losing its end.
+		int lines = detail == null ? 1 : Ui.lines(detail, getFontMetrics(Theme.small()), textWidth(SessionView.WIDTH), 2).size();
+		setPreferredSize(new Dimension(10, HEIGHT + Math.max(0, lines - 1) * getFontMetrics(Theme.small()).getHeight()));
 		setToolTipText(detail == null ? moment.getTitle() : moment.getTitle() + ": " + detail);
+	}
+
+	/** How wide the title and detail may run in a row of that width. */
+	private int textWidth(int w)
+	{
+		return w - (TIME_W + 16) - (icon == null ? 0 : icon.getWidth() + 4);
 	}
 
 	@Override
@@ -78,7 +86,11 @@ class MomentRow extends JComponent
 		if (moment.getDetail() != null)
 		{
 			g.setFont(Theme.small());
-			Ui.shadowed(g, Ui.clip(moment.getDetail(), small, right - tx), tx, ny + fm.getAscent() / 2 + small.getHeight(), Theme.TEXT_MUTED);
+			int line = 0;
+			for (String text : Ui.lines(moment.getDetail(), small, right - tx, 2))
+			{
+				Ui.shadowed(g, text, tx, ny + fm.getAscent() / 2 + small.getHeight() * ++line, Theme.TEXT_MUTED);
+			}
 		}
 		g.dispose();
 	}
