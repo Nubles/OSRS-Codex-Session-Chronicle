@@ -654,14 +654,14 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private void readSlayer(long now)
 	{
 		int left = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
-		Boolean first = slayer.take(left, chronicle.hasSlayerTask());
+		String name = left > 0 ? slayerTaskName() : null;
+		Boolean first = slayer.take(left, chronicle.hasSlayerTask(), left <= 0 || name != null);
 		if (first == null)
 		{
 			// Just arrived in a world: the task's varps may not be back yet, so the task followed is not dropped at once.
 			return;
 		}
 		boolean fresh = first;
-		String name = left > 0 ? slayerTaskName() : null;
 		if (left > 0 && name == null)
 		{
 			// The task's name could not be read: leave the session's task as it was rather than end it.
@@ -1007,7 +1007,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		}
 	}
 
-		private void copyCard(BufferedImage card)
+	private void copyCard(BufferedImage card)
 	{
 		String note;
 		try

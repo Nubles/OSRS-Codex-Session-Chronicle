@@ -37,7 +37,7 @@ public class SlayerWatchTest
 		{
 			return null;
 		}
-		Boolean first = watch.take(left, c.hasSlayerTask());
+		Boolean first = watch.take(left, c.hasSlayerTask(), true);
 		if (first == null)
 		{
 			return null;
@@ -135,7 +135,53 @@ public class SlayerWatchTest
 	public void withoutATaskNothingWaits()
 	{
 		watch.arrived();
-		assertFalse(watch.take(0, false) == null);
+		assertFalse(watch.take(0, false, true) == null);
 		assertFalse(watch.isDue());
+	}
+	@Test
+	public void aKillJustAfterReconnectingCountsAsThisSessions()
+	{
+		watch.arrived();
+		tick(120);
+		for (int i = 0; i < SlayerWatch.ARRIVAL_TICKS; i++)
+		{
+			tick(120);
+		}
+		kill(119);
+		SlayerTask task = c.current().getSlayer();
+		assertEquals(1, task.killedHere());
+
+		// The connection drops mid-fight and comes back; the monster dies on the first ticks after.
+		watch.arrived();
+		watch.moved();
+		tick(119);
+		watch.moved();
+		tick(118);
+		assertEquals("a kill seconds after reconnecting was made here, not on another client", 2, task.killedHere());
+	}
+
+	@Test
+	public void anUnreadableTaskNameAfterArrivingWaitsWithoutSpendingTheFirstReading()
+	{
+		watch.arrived();
+		tick(120);
+		for (int i = 0; i < SlayerWatch.ARRIVAL_TICKS; i++)
+		{
+			tick(120);
+		}
+		SlayerTask task = c.current().getSlayer();
+
+		// Logged out and back in: 20 were killed on another client meanwhile, and the task's name
+		// is unreadable for the first tick, as its target varp has not come back yet.
+		watch.arrived();
+		watch.moved();
+		watch.tick();
+		assertNull("waits for the name", watch.take(100, true, false));
+		assertTrue(watch.isDue());
+		watch.tick();
+		Boolean first = watch.take(100, true, true);
+		assertEquals(Boolean.TRUE, first);
+		c.slayer("Abyssal demons", 100, 120, first, now);
+		assertEquals("kills made elsewhere are not this session's", 0, task.killedHere());
 	}
 }

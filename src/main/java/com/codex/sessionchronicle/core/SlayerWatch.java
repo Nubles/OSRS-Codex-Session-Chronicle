@@ -48,18 +48,26 @@ public final class SlayerWatch
 	 *
 	 * @param left kills left as the varps say now
 	 * @param following whether the session is following a task
-	 * @return null to wait for the next tick; otherwise whether this is a first reading after arriving,
-	 *         whose count may have moved elsewhere and whose emptiness is no finished task
+	 * @param named whether the task's name could be read (only asked when kills are left)
+	 * @return null to wait for the next tick; otherwise whether this is the first reading after
+	 *         arriving, whose count may have moved elsewhere and whose emptiness is no finished task.
+	 *         Only that one reading is first: a kill on the ticks after it, say just after the
+	 *         connection came back mid-fight, is a kill made here.
 	 */
-	public Boolean take(int left, boolean following)
+	public Boolean take(int left, boolean following, boolean named)
 	{
-		if (window > 0 && left <= 0 && following)
+		boolean incomplete = left <= 0 ? following : !named;
+		if (window > 0 && incomplete)
 		{
 			return null;
 		}
 		due = false;
-		boolean first = fresh || window > 0;
-		fresh = false;
+		boolean first = fresh;
+		if (left <= 0 || named)
+		{
+			// A reading the session cannot use (no name) leaves the first reading still to come.
+			fresh = false;
+		}
 		return first;
 	}
 }
