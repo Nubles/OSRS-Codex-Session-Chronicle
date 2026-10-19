@@ -53,6 +53,32 @@ public class WeekTextTest
 	}
 
 	@Test
+	public void setsTheWeekAgainstTheOneBeforeOnlyWhenTheJournalReachesBack()
+	{
+		Session older = mining(at(10, 1, 10), 30);
+		Session lastWeek = mining(at(10, 8, 10), 60);
+		List<Session> thisWeek = Arrays.asList(mining(at(10, 15, 10), 60), mining(at(10, 18, 10), 90));
+		List<Session> journal = new java.util.ArrayList<>(thisWeek);
+		journal.add(lastWeek);
+		journal.add(older);
+		Week w = Week.of(journal, null, at(10, 19, 12), ZoneOffset.UTC, null);
+		assertEquals(1, w.getBefore().getSessions());
+		assertEquals("On the week before: +1h 30m played, xp +100%", WeekCard.against(w));
+		assertTrue(Recap.week(w, true).contains("On the week before: +1h 30m played, xp +100%\n"));
+		// With nothing older than the week before, it may only be where the journal began: no comparison.
+		List<Session> begun = new java.util.ArrayList<>(thisWeek);
+		begun.add(lastWeek);
+		assertEquals(null, WeekCard.against(Week.of(begun, null, at(10, 19, 12), ZoneOffset.UTC, null)));
+		// A week off before this one says so.
+		List<Session> rested = new java.util.ArrayList<>(thisWeek);
+		rested.add(older);
+		assertEquals("The week before had no play.", WeekCard.against(Week.of(rested, null, at(10, 19, 12), ZoneOffset.UTC, null)));
+		// Less play reads as less.
+		Week quieter = Week.of(Arrays.asList(mining(at(10, 15, 10), 30), lastWeek, older), null, at(10, 19, 12), ZoneOffset.UTC, null);
+		assertEquals("On the week before: -30m played, xp even", WeekCard.against(quieter));
+	}
+
+	@Test
 	public void aWeekAcrossAMonthsEndNamesBothMonths()
 	{
 		Week w = Week.of(Collections.singletonList(mining(at(11, 2, 10), 30)), null, at(11, 3, 12), ZoneOffset.UTC, null);

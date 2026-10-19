@@ -17,30 +17,27 @@ public final class Format
 	{
 	}
 
-	/** "8,240", "41.2k", "412k", "1.24M". */
+	/**
+	 * At one precision per unit, so figures side by side read alike: "8,240", "41k", "412k", "2.2M",
+	 * "897.0M", "1.53B". Thousands are whole; millions keep their one decimal even when it is a zero
+	 * ("897.0M" beside "810.9M", never "897M").
+	 */
 	public static String amount(long n)
 	{
 		if (n < 10_000)
 		{
 			return String.format(Locale.ENGLISH, "%,d", n);
 		}
-		if (n < 100_000)
-		{
-			return trim(n / 1_000.0, 1) + "k";
-		}
-		if (n < 1_000_000)
+		// A figure that rounds up to a thousand of one unit is written in the next ("1.0M", not "1000k").
+		if (n < 999_500)
 		{
 			return Math.round(n / 1_000.0) + "k";
 		}
-		if (n < 10_000_000)
+		if (n < 999_950_000)
 		{
-			return trim(n / 1_000_000.0, 2) + "M";
+			return fixed(n / 1_000_000.0, 1) + "M";
 		}
-		if (n < 1_000_000_000)
-		{
-			return trim(n / 1_000_000.0, 1) + "M";
-		}
-		return trim(n / 1_000_000_000.0, 2) + "B";
+		return fixed(n / 1_000_000_000.0, 2) + "B";
 	}
 
 	/** Gained experience with its sign: "+412k". */
@@ -54,14 +51,9 @@ public final class Format
 		return amount(Math.max(0, gp));
 	}
 
-	private static String trim(double value, int places)
+	private static String fixed(double value, int places)
 	{
-		String text = String.format(Locale.ENGLISH, "%." + places + "f", value);
-		while (text.contains(".") && (text.endsWith("0") || text.endsWith(".")))
-		{
-			text = text.substring(0, text.length() - 1);
-		}
-		return text;
+		return String.format(Locale.ENGLISH, "%." + places + "f", value);
 	}
 
 	/** "312k/hr", or "" when there is no rate yet. */

@@ -252,7 +252,8 @@ public final class ShareCard
 			int colW = wide ? w : (w - 16) / 2;
 			for (int i = 0; i < shown; i++)
 			{
-				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % columns) * (colW + 16), y + (i / columns) * 20, colW);
+				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, skills == null ? null : skills.boss(kills.get(i).getName(), onLoaded),
+					x + (i % columns) * (colW + 16), y + (i / columns) * 20, colW);
 			}
 			y += ((shown + columns - 1) / columns) * 20 + 6;
 		}

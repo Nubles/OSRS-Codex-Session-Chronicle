@@ -34,8 +34,13 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -77,6 +82,9 @@ import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.game.SkillIconManager;
+import net.runelite.client.game.SpriteManager;
+import net.runelite.client.hiscore.HiscoreSkill;
+import net.runelite.client.hiscore.HiscoreSkillType;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.loottracker.LootReceived;
@@ -85,6 +93,7 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.AsyncBufferedImage;
 import net.runelite.client.util.Filepath;
+import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 import net.runelite.http.api.loottracker.LootRecordType;
 import org.slf4j.Logger;
@@ -126,6 +135,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 
 	@Inject
 	private ClientThread clientThread;
+
+	@Inject
+	private SpriteManager spriteManager;
 
 	@Inject
 	private ClientToolbar clientToolbar;
@@ -199,6 +211,77 @@ public class CodexSessionChroniclePlugin extends Plugin
 		return configManager.getConfig(CodexSessionChronicleConfig.class);
 	}
 
+	/** Each boss on the hiscores by its name in lower case, for its icon. */
+	private static final Map<String, HiscoreSkill> BOSSES = new HashMap<>();
+
+	static
+	{
+		for (HiscoreSkill s : HiscoreSkill.values())
+		{
+			if (s.getType() == HiscoreSkillType.BOSS && s.getSpriteId() >= 0)
+			{
+				BOSSES.put(s.getName().toLowerCase(Locale.ROOT), s);
+			}
+		}
+	}
+
+	/** Boss icons once loaded, shrunk to the size of a small skill icon. */
+	private final Map<String, BufferedImage> bossIcons = new ConcurrentHashMap<>();
+	/** Who waits for each boss icon still loading; one entry per row or card, however often they paint. */
+	private final Map<String, Set<Runnable>> bossWaiting = new HashMap<>();
+
+	/** A boss's hiscores icon; null for a name that is no boss and, the first time, while it loads. */
+	private BufferedImage bossIcon(String name, Runnable onLoaded)
+	{
+		if (name == null)
+		{
+			return null;
+		}
+		String key = name.toLowerCase(Locale.ROOT);
+		HiscoreSkill boss = BOSSES.get(key);
+		if (boss == null)
+		{
+			return null;
+		}
+		BufferedImage icon = bossIcons.get(key);
+		if (icon != null)
+		{
+			return icon;
+		}
+		boolean ask;
+		synchronized (bossWaiting)
+		{
+			Set<Runnable> waiting = bossWaiting.get(key);
+			ask = waiting == null;
+			if (ask)
+			{
+				waiting = new HashSet<>();
+				bossWaiting.put(key, waiting);
+			}
+			if (onLoaded != null)
+			{
+				waiting.add(onLoaded);
+			}
+		}
+		if (ask)
+		{
+			spriteManager.getSpriteAsync(boss.getSpriteId(), 0, sprite ->
+			{
+				bossIcons.put(key, ImageUtil.resizeImage(sprite, 16, 16));
+				Set<Runnable> waiting;
+				synchronized (bossWaiting)
+				{
+					waiting = bossWaiting.remove(key);
+				}
+				if (waiting != null)
+				{
+					waiting.forEach(Runnable::run);
+				}
+			});
+		}
+		return null;
+	}
+
 	@Override
 	protected void startUp()
 	{
@@ -209,15 +292,25 @@ public class CodexSessionChroniclePlugin extends Plugin
 			iconWatch.watch(image, onLoaded, image::onLoaded);
 			return image;
 		};
-		Icons icons = name ->
+		Icons icons = new Icons()
 		{
-			try
+			@Override
+			public BufferedImage skill(String name)
 			{
-				return skillIconManager.getSkillImage(Skill.valueOf(name.toUpperCase(Locale.ROOT)), true);
+				try
+				{
+					return skillIconManager.getSkillImage(Skill.valueOf(name.toUpperCase(Locale.ROOT)), true);
+				}
+				catch (IllegalArgumentException e)
+				{
+					return null;
+				}
 			}
-			catch (IllegalArgumentException e)
+
+			@Override
+			public BufferedImage boss(String name, Runnable onLoaded)
 			{
-				return null;
+				return bossIcon(name, onLoaded);
 			}
 		};
 		panel = new ChroniclePanel(items, icons, new CardActions()

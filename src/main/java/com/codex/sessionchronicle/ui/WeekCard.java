@@ -63,6 +63,40 @@ public final class WeekCard
 		return (a.getMonth() == b.getMonth() ? DAY_ONLY.format(a) : DAY_MONTH.format(a)) + " to " + DAY_MONTH.format(b);
 	}
 
+	/**
+	 * The week set against the seven days before it: "On the week before: +2h 10m played,
+	 * xp +18%, loot -4%". Null when the journal does not reach back that far, or this week has no play.
+	 */
+	public static String against(Week w)
+	{
+		Week.Before b = w.getBefore();
+		if (b == null || w.getPlayedMs() < 60_000)
+		{
+			return null;
+		}
+		if (b.getPlayedMs() < 60_000)
+		{
+			return "The week before had no play.";
+		}
+		long played = w.getPlayedMs() - b.getPlayedMs();
+		StringBuilder out = new StringBuilder("On the week before: ");
+		out.append(Math.abs(played) < 60_000 ? "the same play" : (played > 0 ? "+" : "-") + Format.duration(Math.abs(played)) + " played");
+		change(out, "xp", w.getXp(), b.getXp());
+		change(out, "loot", w.getLoot(), b.getLoot());
+		return out.toString();
+	}
+
+	/** ", xp +18%", or nothing when the week before had none to compare with. */
+	private static void change(StringBuilder out, String what, long now, long before)
+	{
+		if (before <= 0)
+		{
+			return;
+		}
+		long pct = Math.round((now - before) * 100.0 / before);
+		out.append(", ").append(what).append(' ').append(pct == 0 ? "even" : (pct > 0 ? "+" : "") + pct + "%");
+	}
+
 	/** What the week was, in a line: "A week of Mining", or how many days it was played across. */
 	public static String headline(Week w)
 	{
@@ -111,7 +145,15 @@ public final class WeekCard
 		g.setColor(Theme.TEXT_MUTED);
 		String when = Format.duration(w.getPlayedMs()) + " played over " + w.getSessions() + (w.getSessions() == 1 ? " session" : " sessions");
 		g.drawString(Ui.clip(when, small, cw), x, y + small.getAscent());
-		y += small.getHeight() + 8;
+		y += small.getHeight();
+		String against = against(w);
+		if (against != null)
+		{
+			g.setColor(Theme.TEXT_FAINT);
+			g.drawString(Ui.clip(against, small, cw), x, y + small.getAscent());
+			y += small.getHeight();
+		}
+		y += 8;
 		ShareCard.rule(g, x, y, cw);
 		y += 10;
 
@@ -164,7 +206,7 @@ public final class WeekCard
 			y += 24;
 			for (Week.Activity a : spent)
 			{
-				activity(g, a, w.getPlayedMs(), skills == null ? null : skills.skill(a.getName()), x, y, cw);
+				activity(g, a, w.getPlayedMs(), icon(skills, a.getName(), onLoaded), x, y, cw);
 				y += 28;
 			}
 			y += 4;
@@ -330,13 +372,35 @@ public final class WeekCard
 		return y + WORTH_H;
 	}
 
+	/**
+	 * The icon for something the week went on: the skill's, the boss's from the hiscores, or for any
+	 * other monster the Attack icon, so every line of "Mostly" wears a picture of the same kind.
+	 */
+	static BufferedImage icon(Icons skills, String name, Runnable onLoaded)
+	{
+		if (skills == null || name == null)
+		{
+			return null;
+		}
+		BufferedImage icon = skills.skill(name);
+		if (icon == null)
+		{
+			icon = skills.boss(name, onLoaded);
+		}
+		return icon != null ? icon : skills.skill("Attack");
+	}
+
 	/** One thing the week went on: its icon, name, play time and a bar for its share of the week. */
 	private static void activity(Graphics2D g, Week.Activity a, long total, BufferedImage icon, int x, int y, int cw)
 	{
 		int tx = x + 24;
 		if (icon != null)
 		{
-			g.drawImage(icon, x + (18 - icon.getWidth()) / 2, y + Math.max(0, (16 - icon.getHeight()) / 2), null);
+			// Skill icons are about 16 across, boss icons 25: each is fitted to the same 18 by 16.
+			double scale = Math.min(1, Math.min(18.0 / icon.getWidth(), 16.0 / icon.getHeight()));
+			int iw = (int) Math.round(icon.getWidth() * scale);
+			int ih = (int) Math.round(icon.getHeight() * scale);
+			g.drawImage(icon, x + (18 - iw) / 2, y + Math.max(0, (16 - ih) / 2), iw, ih, null);
 		}
 		else
 		{

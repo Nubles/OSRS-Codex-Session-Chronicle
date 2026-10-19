@@ -100,6 +100,36 @@ public final class Week
 	private int deaths;
 	private int records;
 	private String player;
+	private Before before;
+
+	/** The seven days before the week, to set it against: their play, experience and loot. */
+	public static final class Before
+	{
+		private long playedMs;
+		private long xp;
+		private long loot;
+		private int sessions;
+
+		public long getPlayedMs()
+		{
+			return playedMs;
+		}
+
+		public long getXp()
+		{
+			return xp;
+		}
+
+		public long getLoot()
+		{
+			return loot;
+		}
+
+		public int getSessions()
+		{
+			return sessions;
+		}
+	}
 
 	private Week()
 	{
@@ -127,6 +157,9 @@ public final class Week
 		all.sort(Comparator.comparingLong(Session::getStartedAt));
 		Map<String, Activity> spent = new LinkedHashMap<>();
 		List<Moment> moments = new ArrayList<>();
+		LocalDate before = first.minusDays(DAYS);
+		LocalDate earliest = null;
+		Before last = new Before();
 		for (Session s : all)
 		{
 			if (s == null)
@@ -134,6 +167,14 @@ public final class Week
 				continue;
 			}
 			LocalDate day = Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalDate();
+			earliest = earliest == null || day.isBefore(earliest) ? day : earliest;
+			if (!day.isBefore(before) && day.isBefore(first))
+			{
+				last.sessions++;
+				last.playedMs += s.playedMs;
+				last.xp += s.totalXp();
+				last.loot += s.lootValue();
+			}
 			if (day.isBefore(first) || day.isAfter(today))
 			{
 				continue;
@@ -199,6 +240,10 @@ public final class Week
 			}
 			w.highlights.add(m);
 		}
+		// The week before is only set against this one when the journal reaches back past all of it (a
+		// session older than it is kept): a journal begun midweek, or trimmed of its oldest sessions,
+		// would make it look idle.
+		w.before = earliest != null && earliest.isBefore(before) ? last : null;
 		if (ledger != null)
 		{
 			w.worth = thin(ledger.since(first.atStartOfDay(zone).toInstant().toEpochMilli(), now), WORTH_POINTS);
@@ -224,6 +269,12 @@ public final class Week
 	public List<Day> getDays()
 	{
 		return days;
+	}
+
+	/** The seven days before, or null when the journal does not reach back through them. */
+	public Before getBefore()
+	{
+		return before;
 	}
 
 	/** The day played longest, or -1 in a week without play. */

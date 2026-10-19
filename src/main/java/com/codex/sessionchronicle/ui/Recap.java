@@ -164,6 +164,11 @@ public final class Recap
 		{
 			out.append(totals).append('\n');
 		}
+		String against = WeekCard.against(w);
+		if (against != null)
+		{
+			out.append(against).append('\n');
+		}
 		if (!w.getActivities().isEmpty())
 		{
 			StringBuilder line = new StringBuilder("Mostly: ");

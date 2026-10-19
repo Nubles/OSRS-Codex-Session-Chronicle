@@ -164,7 +164,7 @@ final class SessionView
 			int top = killLines.get(0).count();
 			for (int i = 0; i < killLines.size() && i < KILLS; i++)
 			{
-				stack.add(new KillRow(killLines.get(i), killLines.get(i).count() / (double) top));
+				stack.add(new KillRow(killLines.get(i), killLines.get(i).count() / (double) top, icons));
 			}
 		}
 
@@ -181,7 +181,7 @@ final class SessionView
 			int top = opened.get(0).count();
 			for (int i = 0; i < opened.size() && i < KILLS; i++)
 			{
-				stack.add(new KillRow(opened.get(i), opened.get(i).count() / (double) top));
+				stack.add(new KillRow(opened.get(i), opened.get(i).count() / (double) top, icons));
 			}
 		}
 
