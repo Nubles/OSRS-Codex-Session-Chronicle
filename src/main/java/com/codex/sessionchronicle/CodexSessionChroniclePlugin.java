@@ -267,7 +267,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			spriteManager.getSpriteAsync(boss.getSpriteId(), 0, sprite ->
 			{
-				bossIcons.put(key, ImageUtil.resizeImage(sprite, 16, 16));
+				// Boss icons are 25 by 25 at most, not all square: set on a square canvas first, as the
+				// hiscores panel does, so none is squashed when shrunk to a small skill icon's size.
+				bossIcons.put(key, ImageUtil.resizeImage(ImageUtil.resizeCanvas(sprite, 25, 25), 16, 16));
 				Set<Runnable> waiting;
 				synchronized (bossWaiting)
 				{
