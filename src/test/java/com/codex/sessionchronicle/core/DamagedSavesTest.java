@@ -171,6 +171,23 @@ public class DamagedSavesTest
 	}
 
 	@Test
+	public void playTimeIsHeldToTheSessionsLengthButNeverLostWhenThatIsUnknown()
+	{
+		JsonArray j = journal();
+		JsonObject a = j.get(0).getAsJsonObject();
+		long start = a.get("startedAt").getAsLong();
+		a.addProperty("playedMs", 900 * HOUR);
+		JsonObject b = j.get(1).getAsJsonObject();
+		b.remove("lastSeenAt");
+		b.remove("endedAt");
+		List<Session> read = Journal.read(GSON, j.toString());
+		assertEquals(2 * HOUR + 60_000L, read.get(0).getPlayedMs());
+		assertEquals(start, read.get(0).getStartedAt());
+		// Saved without when it was last seen: its two hours stay two hours.
+		assertEquals(2 * HOUR, read.get(1).getPlayedMs());
+	}
+
+	@Test
 	public void theSessionSavedWhileOpen()
 	{
 		String journal = journal().toString();

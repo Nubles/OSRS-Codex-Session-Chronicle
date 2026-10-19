@@ -113,9 +113,12 @@ public class Session
 		{
 			goal = null;
 		}
+		// Play time can be no longer than the session lasted; a save that never said when it was last
+		// seen is only held to a month, rather than losing its time.
+		long span = Math.max(lastSeenAt, endedAt) - startedAt;
+		playedMs = Saved.clamp(playedMs, span > 0 ? span + 60_000L : 30 * 86_400_000L);
 		lastSeenAt = Math.max(lastSeenAt, startedAt);
 		endedAt = endedAt == 0 ? 0 : Math.max(endedAt, startedAt);
-		playedMs = Saved.clamp(playedMs, Math.max(0, lastSeenAt - startedAt) + 60_000L);
 		deaths = (int) Saved.clamp(deaths, MAX_KILLS);
 		otherLoot = Saved.clamp(otherLoot, Saved.MAX_WORTH);
 		otherDrops = (int) Saved.clamp(otherDrops, Integer.MAX_VALUE);
