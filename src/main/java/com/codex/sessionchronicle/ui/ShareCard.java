@@ -191,11 +191,11 @@ public final class ShareCard
 		}
 		if (!pace.isEmpty())
 		{
-			header(g, "Pace", "vs my past sessions", x, y, w);
+			header(g, "Pace", "vs past sessions", x, y, w);
 			y += 24;
 			for (Pace.Line line : pace)
 			{
-				PaceRow.paint(g, line, x, y, w);
+				PaceRow.paint(g, line, x, y, w, "my");
 				y += PaceRow.HEIGHT + 2;
 			}
 			y += 4;

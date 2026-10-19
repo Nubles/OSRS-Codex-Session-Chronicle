@@ -33,12 +33,16 @@ class PaceRow extends JComponent
 	{
 		Graphics2D g = (Graphics2D) graphics.create();
 		Theme.smooth(g);
-		paint(g, line, 0, 0, getWidth());
+		paint(g, line, 0, 0, getWidth(), "your");
 		g.dispose();
 	}
 
-	/** Draws the row at a place and width; the card uses the same drawing. */
-	static void paint(Graphics2D g, Pace.Line line, int x, int y, int w)
+	/**
+	 * Draws the row at a place and width; the card uses the same drawing.
+	 *
+	 * @param whose "your" in the panel, "my" on the card the player shares
+	 */
+	static void paint(Graphics2D g, Pace.Line line, int x, int y, int w, String whose)
 	{
 		Color tint = color(line.getKind());
 		g.setFont(Theme.body());
@@ -74,7 +78,7 @@ class PaceRow extends JComponent
 		int bw = small.stringWidth(best);
 		g.setColor(Theme.TEXT_FAINT);
 		g.drawString(best, x + w - bw, sy);
-		String verdict = verdict(line);
+		String verdict = verdict(line, whose);
 		g.setColor(verdictColor(line));
 		g.drawString(Ui.clip(verdict, small, w - bw - 8), x, sy);
 	}
@@ -99,7 +103,7 @@ class PaceRow extends JComponent
 	}
 
 	/** How it compares, in a few words. */
-	static String verdict(Pace.Line line)
+	static String verdict(Pace.Line line, String whose)
 	{
 		if (line.getSamples() == 0)
 		{
@@ -107,14 +111,14 @@ class PaceRow extends JComponent
 		}
 		if (line.isRecord())
 		{
-			return line.getKind() == Pace.Kind.LOOT ? "Richer than your best" : "Faster than your best";
+			return (line.getKind() == Pace.Kind.LOOT ? "Richer than " : "Faster than ") + whose + " best";
 		}
 		double vs = line.vsUsual();
 		if (Math.abs(vs) < 0.03)
 		{
-			return "About your usual";
+			return "About " + whose + " usual";
 		}
-		return Math.round(Math.abs(vs) * 100) + "% " + (vs > 0 ? "above" : "below") + " your usual";
+		return Math.round(Math.abs(vs) * 100) + "% " + (vs > 0 ? "above " : "below ") + whose + " usual";
 	}
 
 	static Color verdictColor(Pace.Line line)

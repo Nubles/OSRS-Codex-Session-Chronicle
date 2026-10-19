@@ -40,7 +40,7 @@ final class JournalView
 			records.getWeekSessions() + (records.getWeekSessions() == 1 ? " session" : " sessions"), Theme.TEAL));
 		int streak = records.getStreakDays();
 		int longest = records.getLongestStreak();
-		String streakNote = streak > 1 && streak >= longest ? "your longest yet" : longest > Math.max(1, streak) ? "best " + longest + " days"
+		String streakNote = streak > 1 && streak >= longest ? "longest yet" : longest > Math.max(1, streak) ? "best " + longest + " days"
 			: streak == 1 ? "play tomorrow too" : "no play yesterday";
 		tiles.add(new StatTile(streak == 0 ? "-" : streak + (streak == 1 ? " day" : " days"), "Streak", streakNote, Theme.EMBER));
 		Session xp = records.getMostXp();
