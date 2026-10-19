@@ -6,6 +6,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.geom.Path2D;
+import java.util.Locale;
 import javax.swing.JComponent;
 
 /** One monster, raid or chest: how many this session and the game's kill count after them. */
@@ -47,7 +48,7 @@ class KillRow extends JComponent
 		g.fill(mark);
 
 		String count = "x" + line.count();
-		String kc = line.getKillCount() > 0 ? "KC " + String.format("%,d", line.getKillCount()) : "";
+		String kc = line.getKillCount() > 0 ? "KC " + String.format(Locale.ENGLISH, "%,d", line.getKillCount()) : "";
 		g.setFont(Theme.small());
 		FontMetrics small = g.getFontMetrics();
 		int kcw = kc.isEmpty() ? 0 : small.stringWidth(kc) + 8;

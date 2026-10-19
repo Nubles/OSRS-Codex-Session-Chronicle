@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle.core;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -125,6 +126,6 @@ public final class ChatParser
 
 	private static String capital(String word)
 	{
-		return word.isEmpty() ? word : Character.toUpperCase(word.charAt(0)) + word.substring(1).toLowerCase();
+		return word.isEmpty() ? word : Character.toUpperCase(word.charAt(0)) + word.substring(1).toLowerCase(Locale.ROOT);
 	}
 }

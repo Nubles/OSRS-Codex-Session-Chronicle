@@ -11,6 +11,7 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BiConsumer;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;

@@ -17,6 +17,7 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 /**
@@ -348,7 +349,7 @@ public final class ShareCard
 	private static void header(Graphics2D g, String text, String trailing, int x, int y, int w)
 	{
 		g.setFont(Theme.small());
-		SectionHeader.paint(g, text.toUpperCase(), trailing, x, y, w, 20);
+		SectionHeader.paint(g, text.toUpperCase(Locale.ROOT), trailing, x, y, w, 20);
 	}
 
 	private static void rule(Graphics2D g, int x, int y, int w)

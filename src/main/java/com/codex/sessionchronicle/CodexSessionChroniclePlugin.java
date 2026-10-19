@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -194,7 +195,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			try
 			{
-				return skillIconManager.getSkillImage(Skill.valueOf(name.toUpperCase()), true);
+				return skillIconManager.getSkillImage(Skill.valueOf(name.toUpperCase(Locale.ROOT)), true);
 			}
 			catch (IllegalArgumentException e)
 			{
@@ -585,7 +586,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		String line = new ChatMessageBuilder()
 			.append(ChatColorType.HIGHLIGHT).append("Session Chronicle: ")
 			.append(ChatColorType.HIGHLIGHT).append(reached.getTitle())
-			.append(ChatColorType.NORMAL).append(", " + reached.getDetail().toLowerCase() + ".")
+			.append(ChatColorType.NORMAL).append(", " + reached.getDetail().toLowerCase(Locale.ROOT) + ".")
 			.build();
 		chatMessageManager.queue(QueuedMessage.builder()
 			.type(ChatMessageType.CONSOLE)
