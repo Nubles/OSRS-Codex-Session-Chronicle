@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -168,6 +169,59 @@ public class DamagedSavesTest
 				use(j.toString(), null, null);
 			}
 		}
+	}
+
+	@Test
+	public void whateverCannotBeReadIsSetAsideBeforeItIsWrittenOver()
+	{
+		// A whole journal reads with nothing to set aside.
+		boolean[] lost = {false};
+		assertEquals(4, Journal.read(GSON, journal().toString(), () -> lost[0] = true).size());
+		assertFalse(lost[0]);
+		// One broken session costs only itself at reading, but the next session filed would write over
+		// it: the plugin is told, so the save is kept aside first.
+		JsonArray j = journal();
+		j.get(1).getAsJsonObject().add("kills", PARSER.parse("\"garbage\""));
+		assertEquals(4, Journal.read(GSON, j.toString(), () -> lost[0] = true).size());
+		assertTrue(lost[0]);
+		// So is a moment of a kind only a later version knows, which this one leaves out.
+		lost[0] = false;
+		j = journal();
+		j.get(0).getAsJsonObject().getAsJsonArray("moments").get(0).getAsJsonObject().addProperty("kind", "VOYAGE");
+		Journal.read(GSON, j.toString(), () -> lost[0] = true);
+		assertTrue(lost[0]);
+		// One copy is kept: the first, then only a save at least as full, never a stub over it.
+		String full = journal().toString();
+		assertTrue(Saved.setAside(null, full));
+		assertFalse(Saved.setAside(full, full));
+		assertFalse(Saved.setAside(full, "[{\"startedAt\":1"));
+		assertTrue(Saved.setAside("[{\"startedAt\":1", full));
+		assertFalse(Saved.setAside(null, "  "));
+		StringBuilder huge = new StringBuilder();
+		while (huge.length() <= Saved.MAX_ASIDE)
+		{
+			huge.append(full);
+		}
+		assertFalse(Saved.setAside(null, huge.toString()));
+	}
+
+	@Test
+	public void aLongGrindKeepsEveryKill()
+	{
+		// A day of bursting one task, logged back in within the break each time: 25,000 kills on one
+		// line is a real session, not damage, and once counted only 20,000.
+		Session s = new Session(NOW - 20 * HOUR, "Zezima");
+		Session.KillLine line = new Session.KillLine("Dust devil");
+		line.looted = 25_000;
+		s.kills.put("dust devil", line);
+		s.playedMs = 18 * HOUR;
+		s.lastSeenAt = NOW;
+		assertEquals(25_000, line.count());
+		Session read = Session.read(GSON, GSON.toJson(s));
+		assertEquals(25_000, read.totalKills());
+		// A count past any session still stops where the sums cannot overflow.
+		line.looted = Integer.MAX_VALUE;
+		assertEquals(Session.MAX_KILLS, Session.read(GSON, GSON.toJson(s)).totalKills());
 	}
 
 	@Test

@@ -230,7 +230,7 @@ public final class Week implements Cloneable
 				break;
 			}
 			String title = m.getTitle();
-			if (m.getKind() == Moment.Kind.RECORD && title.contains(":") && !told.add(title.substring(0, title.indexOf(':'))))
+			if (m.getKind() == Moment.Kind.RECORD && !told.add(recordOf(title)))
 			{
 				continue;
 			}
@@ -242,8 +242,7 @@ public final class Week implements Cloneable
 		{
 			if (m.getKind() == Moment.Kind.RECORD)
 			{
-				String title = m.getTitle();
-				records.add(title.contains(":") ? title.substring(0, title.indexOf(':')) : title);
+				records.add(recordOf(m.getTitle()));
 			}
 		}
 		w.records = records.size();
@@ -394,6 +393,12 @@ public final class Week implements Cloneable
 	public int getDeaths()
 	{
 		return deaths;
+	}
+
+	/** Which record a record moment tells: "Mining record" of "Mining record: 206k xp/hr", or the whole title. */
+	private static String recordOf(String title)
+	{
+		return title.contains(":") ? title.substring(0, title.indexOf(':')) : title;
 	}
 
 	/**

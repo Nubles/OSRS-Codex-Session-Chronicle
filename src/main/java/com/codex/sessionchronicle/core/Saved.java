@@ -11,7 +11,7 @@ import java.util.Map;
  * type or written by a later version. Nothing here throws: what cannot be read is left out, and only
  * that.
  */
-final class Saved
+public final class Saved
 {
 	/** More than any account is worth or any stack holds; a figure past it is damage. */
 	static final long MAX_WORTH = 10_000_000_000_000L;
@@ -120,6 +120,23 @@ final class Saved
 			return reads(gson, type, key, kept) ? kept : null;
 		}
 		return null;
+	}
+
+	/** The longest damaged save set aside; one past it is only logged, so the profile never doubles in size for it. */
+	static final int MAX_ASIDE = 1_000_000;
+
+	/**
+	 * Whether a save that could not be read whole should be set aside in place of the copy already
+	 * there, which is kept to just one: yes when there is none, and otherwise only for a save at least
+	 * as long, so a later stub (a journal begun again, then damaged) never replaces a fuller copy.
+	 */
+	public static boolean setAside(String kept, String damaged)
+	{
+		if (damaged == null || damaged.trim().isEmpty() || damaged.length() > MAX_ASIDE)
+		{
+			return false;
+		}
+		return kept == null || kept.isEmpty() || !kept.equals(damaged) && damaged.length() >= kept.length();
 	}
 
 	static long clamp(long n, long max)

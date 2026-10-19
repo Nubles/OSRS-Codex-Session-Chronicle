@@ -8,6 +8,7 @@ import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.LedgerWorth;
 import com.codex.sessionchronicle.core.Midnight;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Saved;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.Summary;
@@ -980,14 +981,16 @@ public class CodexSessionChroniclePlugin extends Plugin
 			return;
 		}
 		String saved = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, JOURNAL_KEY);
-		List<Session> list = Journal.read(gson, saved);
-		if (list.isEmpty() && saved != null && !saved.trim().isEmpty() && !saved.trim().equals("[]"))
+		boolean[] lost = {false};
+		List<Session> list = Journal.read(gson, saved, () -> lost[0] = true);
+		if (lost[0] || list.isEmpty() && saved != null && !saved.trim().isEmpty() && !saved.trim().equals("[]"))
 		{
-			// Nothing in it could be read. The journal starts afresh, but the old one is set aside first
-			// (once, never over an earlier one) so the next session filed does not write over the only copy.
-			log.warn("Could not read the saved journal; it is kept as {}", DAMAGED_KEY);
-			if (configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, DAMAGED_KEY) == null)
+			// Some or all of it could not be read, and the next session filed writes over it. The save is
+			// set aside first as it was, one copy only, never over a fuller one (see Saved.setAside).
+			String kept = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, DAMAGED_KEY);
+			if (Saved.setAside(kept, saved))
 			{
+				log.warn("Part of the saved journal could not be read; it is kept as it was as {}", DAMAGED_KEY);
 				configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, DAMAGED_KEY, saved);
 			}
 		}

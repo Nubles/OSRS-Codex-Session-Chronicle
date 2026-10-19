@@ -50,7 +50,7 @@ Codex Ledger, Gear Roadmap and Navigator read the journal this plugin saves.
 
 ## How sessions work
 
-A session begins when you log in. World hops never end it, and logging out and back in within the break allowance carries it on. Play time only counts while you are logged in. Experience is measured from your first reading of each skill in the session, and loot is priced at the Grand Exchange price when it dropped. Sessions are saved per account in your RuneLite profile, also as the client closes. A journal damaged in part keeps every session that can still be read; one that cannot be read at all is set aside rather than written over.
+A session begins when you log in. World hops never end it, and logging out and back in within the break allowance carries it on. Play time only counts while you are logged in. Experience is measured from your first reading of each skill in the session, and loot is priced at the Grand Exchange price when it dropped. Sessions are saved per account in your RuneLite profile, also as the client closes. A journal damaged in part keeps every session that can still be read, and any journal that could not be read whole is first copied aside (one copy, under `journalUnreadable`) so the next session filed never writes over the only copy.
 
 ## Rules posture
 

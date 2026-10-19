@@ -17,8 +17,11 @@ public class Session
 {
 	/** Most experience a skill can hold. */
 	static final long MAX_XP = 200_000_000L;
-	/** More kills of one thing than a session could hold; a line claiming more is damage and counts this many. */
-	static final int MAX_KILLS = 20_000;
+	/**
+	 * More kills of one thing than a session could hold (one every game tick for a week); a line
+	 * claiming more is damage and counts this many. A long day's grind of tens of thousands is real.
+	 */
+	static final int MAX_KILLS = 1_000_000;
 
 	/**
 	 * The session saved while it was open, or null when there is none or it cannot be read. A field
@@ -287,7 +290,7 @@ public class Session
 	/** Monsters killed and raids cleared: bird nests, crates and caskets opened are left out. */
 	public int totalKills()
 	{
-		int total = 0;
+		long total = 0;
 		for (KillLine line : kills.values())
 		{
 			if (line.isKill())
@@ -295,7 +298,8 @@ public class Session
 				total += line.count();
 			}
 		}
-		return total;
+		// However many lines a damaged save holds, no session has more, and the journal's sums stay whole.
+		return (int) Math.min(total, MAX_KILLS);
 	}
 
 	/** A session with nothing in it is not worth a page in the journal. */

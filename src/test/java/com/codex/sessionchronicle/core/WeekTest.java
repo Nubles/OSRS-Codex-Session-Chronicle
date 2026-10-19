@@ -95,6 +95,22 @@ public class WeekTest
 	}
 
 	@Test
+	public void aRecordWithoutADetailInItsTitleIsListedOnceAsItIsCountedOnce()
+	{
+		// "Richest session yet" twice in a week is one record beaten again: it was listed twice
+		// while the header said "1 record".
+		Session first = session(at(14, 10), 60, "Mining", 1_000);
+		first.moments.add(new Moment(Moment.Kind.RECORD, at(14, 11), "Richest session yet", "2.0M of loot", 0, 2_000_000));
+		Session second = session(at(16, 10), 60, "Mining", 1_000);
+		second.moments.add(new Moment(Moment.Kind.RECORD, at(16, 11), "Richest session yet", "3.0M of loot", 0, 3_000_000));
+		Week w = Week.of(Arrays.asList(second, first), null, at(19, 10), ZONE, null);
+		assertEquals(1, w.getRecords());
+		assertEquals(1, w.getHighlights().size());
+		assertEquals("3.0M of loot", w.getHighlights().get(0).getDetail());
+		assertEquals("1 record", w.highlightsNote());
+	}
+
+	@Test
 	public void theHighlightsHeaderNeverCountsMoreThanItLists()
 	{
 		// Four records over four skills, but room for three lines: the header once read "4 records".

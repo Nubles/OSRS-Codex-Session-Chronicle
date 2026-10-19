@@ -36,6 +36,18 @@ public final class Journal
 	 */
 	public static List<Session> read(Gson gson, String json)
 	{
+		return read(gson, json, () ->
+		{
+		});
+	}
+
+	/**
+	 * As {@link #read(Gson, String)}, telling {@code lost} when anything that was saved had to be left
+	 * out or mended to be read (a broken session, a field of the wrong type, a moment of a kind this
+	 * version does not know), so the save can be set aside before it is written over.
+	 */
+	public static List<Session> read(Gson gson, String json, Runnable lost)
+	{
 		List<Session> out = new ArrayList<>();
 		if (json == null || json.trim().isEmpty())
 		{
@@ -51,7 +63,12 @@ public final class Journal
 				{
 					if (s != null && s.startedAt > 0)
 					{
+						int moments = s.moments == null ? 0 : s.moments.size();
 						out.add(s.repair());
+						if (s.moments.size() < moments)
+						{
+							lost.run();
+						}
 					}
 				}
 			}
@@ -60,6 +77,7 @@ public final class Journal
 		catch (RuntimeException e)
 		{
 			// Something in it is broken: read it session by session below.
+			lost.run();
 		}
 		JsonElement root = Saved.tree(gson, json);
 		if (root != null && root.isJsonArray())
