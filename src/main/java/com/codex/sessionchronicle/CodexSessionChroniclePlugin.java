@@ -459,10 +459,14 @@ public class CodexSessionChroniclePlugin extends Plugin
 		publish();
 	}
 
-	/** Reads Codex Ledger's net worth for the session, when Ledger is installed and has seen the bank. */
+	/**
+	 * Reads Codex Ledger's net worth for the session, when Ledger is installed and has seen the bank.
+	 * A paused session reads it too: Ledger saves as the player logs out, after this session has paused,
+	 * and that last figure is the one the session should be filed with.
+	 */
 	private void readWorth()
 	{
-		if (!chronicle.isLive() || profile == null)
+		if (chronicle.current() == null || profile == null)
 		{
 			return;
 		}
@@ -476,6 +480,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 			if (chronicle.worth(gson.fromJson(json, LedgerWorth.class)))
 			{
 				dirty = true;
+				if (!chronicle.isLive())
+				{
+					// Paused, so no tick will save it: keep the logout figure should the client close now.
+					saveCurrent();
+				}
 			}
 		}
 		catch (RuntimeException e)

@@ -108,6 +108,10 @@ public class TripsAndWorthTest
 		assertEquals(3_200_000, (long) c.current().worthChange());
 		assertEquals(3_200_000, (long) Summary.of(c.current(), Summary.State.LIVE).getWorthChange());
 		assertEquals(3_200_000, (long) Journal.compact(c.current()).worthChange());
+		// Ledger saves as the player logs out, after the session has paused: that figure is the one filed.
+		c.pause(start + 1_200);
+		assertTrue(c.worth(new LedgerWorth(810_000_000, start - 86_400_000L, null)));
+		assertEquals(10_000_000, (long) c.current().worthChange());
 
 		// A session already under way when Ledger is first read looks its start up in the history...
 		Chronicle late = new Chronicle();
