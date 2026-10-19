@@ -21,4 +21,12 @@ public class FormatTest
 		assertEquals("1.53B", Format.coins(1_534_000_000L));
 		assertEquals("-450k", Format.signedCoins(-450_000));
 	}
+
+	@Test
+	public void stacksUseTheSuitesLowercaseK()
+	{
+		assertEquals("450k", Format.stack(450_000));
+		assertEquals("99999", Format.stack(99_999));
+		assertEquals("12M", Format.stack(12_000_000));
+	}
 }

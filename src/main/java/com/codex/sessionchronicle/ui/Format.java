@@ -139,7 +139,7 @@ public final class Format
 		return String.format(Locale.ENGLISH, "%,d", n);
 	}
 
-	/** An item stack the way the game writes it: "950", "45K", "12M". */
+	/** An item stack, shortened where the game shortens it, with the suite's lowercase k: "950", "45k", "12M". */
 	public static String stack(long n)
 	{
 		if (n < 100_000)
@@ -148,7 +148,7 @@ public final class Format
 		}
 		if (n < 10_000_000)
 		{
-			return n / 1_000 + "K";
+			return n / 1_000 + "k";
 		}
 		return n / 1_000_000 + "M";
 	}

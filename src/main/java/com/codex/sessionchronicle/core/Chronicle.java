@@ -633,21 +633,47 @@ public class Chronicle
 		return n < 1_000 ? String.valueOf(n) : coins(n);
 	}
 
+	/**
+	 * Coins by the rule the Codex plugins share: thousands whole, millions with one decimal and
+	 * billions with two, so a moment reads "5.0M of loot, beating 4.2M", never "5M" beside "4.2M".
+	 */
 	static String coins(long gp)
 	{
-		if (gp >= 1_000_000_000)
+		if (gp >= 999_950_000)
 		{
 			return String.format(Locale.ROOT, "%.2fB", gp / 1e9);
 		}
-		if (gp >= 1_000_000)
+		if (gp >= 999_500)
 		{
-			// "5M" rather than "5.0M"; "1.2M" keeps its tenth.
-			return String.format(Locale.ROOT, "%.1fM", gp / 1e6).replace(".0M", "M");
+			return String.format(Locale.ROOT, "%.1fM", gp / 1e6);
 		}
 		if (gp >= 1_000)
 		{
 			return Math.round(gp / 1e3) + "k";
 		}
 		return gp + " coins";
+	}
+
+	/** A goal's round figure by its name: "500k", "5M", "1.5M", "1B"; "950" below a thousand. */
+	static String mark(long n)
+	{
+		if (n < 1_000)
+		{
+			return String.valueOf(n);
+		}
+		if (n < 999_500)
+		{
+			return Math.round(n / 1e3) + "k";
+		}
+		String text = n < 999_950_000 ? String.format(Locale.ROOT, "%.1f", n / 1e6) : String.format(Locale.ROOT, "%.2f", n / 1e9);
+		while (text.endsWith("0"))
+		{
+			text = text.substring(0, text.length() - 1);
+		}
+		if (text.endsWith("."))
+		{
+			text = text.substring(0, text.length() - 1);
+		}
+		return text + (n < 999_950_000 ? "M" : "B");
 	}
 }

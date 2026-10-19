@@ -177,4 +177,20 @@ public class GoalTest
 			+ "\"abyssal demon\":{\"name\":\"Abyssal demon\",\"looted\":7}}}", Session.class);
 		assertEquals(4 + 7, s.totalKills());
 	}
+
+	@Test
+	public void movesAndGoalsWriteCoinsTheSuitesWay()
+	{
+		// Thousands whole and lowercase, millions to one place, billions to two.
+		assertEquals("41k", Chronicle.coins(41_200));
+		assertEquals("1.0M", Chronicle.coins(999_500));
+		assertEquals("5.0M", Chronicle.coins(5_000_000));
+		assertEquals("1.50B", Chronicle.coins(1_504_000_000L));
+		// A goal's round figure stays plain.
+		assertEquals("5M", Chronicle.mark(5_000_000));
+		assertEquals("1.5M", Chronicle.mark(1_500_000));
+		assertEquals("500k", Chronicle.mark(500_000));
+		assertEquals("1.5B", Chronicle.mark(1_500_000_000L));
+		assertEquals("500k xp", Goal.describe(Goal.Kind.XP, 500_000));
+	}
 }

@@ -156,7 +156,8 @@ public class PaceTest
 		List<Moment> marked = Journal.markRecords(boss(2 * DAY, "Vorkath", 18, 9_000_000, HOUR), journal);
 		assertEquals(1, marked.size());
 		assertEquals("Richest session yet", marked.get(0).getTitle());
-		assertEquals("9M of loot, beating 4M", marked.get(0).getDetail());
+		// Written as the rest of the suite writes coins, both sides alike.
+		assertEquals("9.0M of loot, beating 4.0M", marked.get(0).getDetail());
 	}
 
 	@Test

@@ -103,7 +103,7 @@ public class Goal
 		switch (kind)
 		{
 			case LOOT:
-				return Chronicle.coins(amount) + " loot";
+				return Chronicle.mark(amount) + " loot";
 			case KILLS:
 				return amount + (amount == 1 ? " kill" : " kills");
 			case TIME:
@@ -111,7 +111,7 @@ public class Goal
 				String hours = minutes / 60 + "h" + (minutes % 60 > 0 ? " " + minutes % 60 + "m" : "");
 				return (minutes >= 60 ? hours : minutes + "m") + " played";
 			default:
-				return Chronicle.amount(amount) + " xp";
+				return Chronicle.mark(amount) + " xp";
 		}
 	}
 
