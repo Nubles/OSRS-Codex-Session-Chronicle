@@ -4,6 +4,7 @@ import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerTask;
 import com.codex.sessionchronicle.core.Summary;
+import com.codex.sessionchronicle.core.Week;
 import java.util.List;
 
 /**
@@ -47,7 +48,7 @@ public final class Recap
 		}
 		if (s.getKills() > 0)
 		{
-			part(totals, s.getKills() + (s.getKills() == 1 ? " kill" : " kills"));
+			part(totals, Format.count(s.getKills()) + (s.getKills() == 1 ? " kill" : " kills"));
 		}
 		if (s.getDeaths() > 0)
 		{
@@ -99,10 +100,10 @@ public final class Recap
 			for (int i = 0; i < kills.size() && i < TOP; i++)
 			{
 				Session.KillLine k = kills.get(i);
-				line.append(i > 0 ? ", " : "").append(k.getName()).append(" x").append(k.count());
+				line.append(i > 0 ? ", " : "").append(k.getName()).append(" x").append(Format.count(k.count()));
 				if (k.getKillCount() > 0)
 				{
-					line.append(" (kc ").append(k.getKillCount()).append(')');
+					line.append(" (kc ").append(Format.count(k.getKillCount())).append(')');
 				}
 			}
 			out.append(line).append('\n');
@@ -122,6 +123,63 @@ public final class Recap
 			for (int i = 0; i < highlights.size() && i < TOP; i++)
 			{
 				line.append(i > 0 ? ", " : "").append(highlights.get(i).getTitle());
+			}
+			out.append(line).append('\n');
+		}
+		out.append("(Codex Session Chronicle)");
+		return out.toString();
+	}
+
+	/** The week card as a few plain lines. */
+	public static String week(Week w, boolean showName)
+	{
+		StringBuilder out = new StringBuilder();
+		String who = showName && w.getPlayer() != null && !w.getPlayer().isEmpty() ? w.getPlayer() + "'s week" : "My week";
+		out.append(who).append(", ").append(WeekCard.range(w)).append('\n');
+		out.append(WeekCard.headline(w)).append(", ").append(Format.duration(w.getPlayedMs())).append(" played over ")
+			.append(w.getSessions()).append(w.getSessions() == 1 ? " session" : " sessions").append('\n');
+		StringBuilder totals = new StringBuilder();
+		if (w.getXp() > 0)
+		{
+			part(totals, Format.xp(w.getXp()) + " xp");
+		}
+		if (w.getLoot() > 0)
+		{
+			part(totals, Format.coins(w.getLoot()) + " loot");
+		}
+		if (w.getLevels() > 0)
+		{
+			part(totals, w.getLevels() + (w.getLevels() == 1 ? " level" : " levels"));
+		}
+		if (w.getKills() > 0)
+		{
+			part(totals, Format.count(w.getKills()) + (w.getKills() == 1 ? " kill" : " kills"));
+		}
+		Long worth = w.worthChange();
+		if (worth != null)
+		{
+			part(totals, "net worth " + Format.signedCoins(worth));
+		}
+		if (totals.length() > 0)
+		{
+			out.append(totals).append('\n');
+		}
+		if (!w.getActivities().isEmpty())
+		{
+			StringBuilder line = new StringBuilder("Mostly: ");
+			for (int i = 0; i < w.getActivities().size(); i++)
+			{
+				Week.Activity a = w.getActivities().get(i);
+				line.append(i > 0 ? ", " : "").append(a.getName()).append(" ").append(Format.duration(a.getPlayedMs()));
+			}
+			out.append(line).append('\n');
+		}
+		if (!w.getHighlights().isEmpty())
+		{
+			StringBuilder line = new StringBuilder("Moments: ");
+			for (int i = 0; i < w.getHighlights().size(); i++)
+			{
+				line.append(i > 0 ? ", " : "").append(w.getHighlights().get(i).getTitle());
 			}
 			out.append(line).append('\n');
 		}

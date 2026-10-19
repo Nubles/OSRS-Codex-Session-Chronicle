@@ -53,6 +53,37 @@ public final class LedgerWorth
 	}
 
 	/**
+	 * The worth over a stretch of time, oldest first, as {epoch ms, worth}: the point standing as it
+	 * began (when the history reaches that far back), every point after it, and the total now.
+	 * Empty before Ledger has seen the bank.
+	 */
+	public List<long[]> since(long from, long now)
+	{
+		List<long[]> out = new java.util.ArrayList<>();
+		if (!isReady() || history == null)
+		{
+			return out;
+		}
+		long before = at(from);
+		if (before >= 0)
+		{
+			out.add(new long[]{from, before});
+		}
+		for (Point p : history)
+		{
+			if (p != null && p.t > from && p.t <= now)
+			{
+				out.add(new long[]{p.t, p.v});
+			}
+		}
+		if (!out.isEmpty() || since <= now)
+		{
+			out.add(new long[]{now, total});
+		}
+		return out;
+	}
+
+	/**
 	 * The worth as it stood at a moment: the last point at or before it. Ledger keeps a point every
 	 * quarter hour for the last two days, so this is close for a session begun recently; -1 when the
 	 * history does not reach back that far or Ledger began after it.

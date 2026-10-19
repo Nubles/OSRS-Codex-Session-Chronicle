@@ -5,10 +5,12 @@ import com.codex.sessionchronicle.core.Chronicle;
 import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.LedgerWorth;
+import com.codex.sessionchronicle.core.Midnight;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.Summary;
+import com.codex.sessionchronicle.core.Week;
 import com.codex.sessionchronicle.overlay.SessionTicker;
 import com.codex.sessionchronicle.ui.CardActions;
 import com.codex.sessionchronicle.ui.ChroniclePanel;
@@ -157,6 +159,13 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private ChroniclePanel panel;
 	private NavigationButton navButton;
 	private ScheduledFuture<?> expiry;
+	/** Wakes the panel at local midnight, so Today and the week roll over even while logged out. */
+	private ScheduledFuture<?> midnight;
+	private volatile boolean running;
+	/** The local day the panel was last given, as an epoch day, so a missed midnight is caught too. */
+	private long publishedDay = Long.MIN_VALUE;
+	/** Codex Ledger's saved worth as last read, for the week card's worth line; null without Ledger. */
+	private LedgerWorth ledgerBook;
 
 	private String profile;
 	private List<Session> journal = Collections.emptyList();
@@ -205,9 +214,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 		panel = new ChroniclePanel(items, icons, new CardActions()
 		{
 			@Override
-			public void save(BufferedImage card, Summary session)
+			public void save(BufferedImage card, String fileName)
 			{
-				saveCard(card, session);
+				saveCard(card, fileName);
 			}
 
 			@Override
@@ -258,6 +267,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		ticker.setEnabled(config.showTicker());
 		overlayManager.add(ticker);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
+		running = true;
+		scheduleMidnight();
 		clientThread.invokeLater(() ->
 		{
 			loadProfile();
@@ -270,10 +281,17 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		running = false;
 		if (expiry != null)
 		{
 			expiry.cancel(false);
 			expiry = null;
+		}
+		ScheduledFuture<?> wake = midnight;
+		if (wake != null)
+		{
+			wake.cancel(false);
+			midnight = null;
 		}
 		overlayManager.remove(ticker);
 		clientToolbar.removeNavigation(navButton);
@@ -287,6 +305,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 			pastSummaries = Collections.emptyList();
 			pendingBegin = false;
 			snapshot = null;
+			ledgerBook = null;
+			publishedDay = Long.MIN_VALUE;
 		});
 		panel = null;
 	}
@@ -495,18 +515,14 @@ public class CodexSessionChroniclePlugin extends Plugin
 	 */
 	private void readWorth()
 	{
-		if (chronicle.current() == null || profile == null)
-		{
-			return;
-		}
-		String json = configManager.getRSProfileConfiguration(LEDGER_GROUP, LEDGER_KEY);
-		if (json == null || json.isEmpty())
+		LedgerWorth book = readLedgerBook();
+		if (book == null)
 		{
 			return;
 		}
 		try
 		{
-			if (chronicle.worth(gson.fromJson(json, LedgerWorth.class)))
+			if (chronicle.current() != null && chronicle.worth(book))
 			{
 				dirty = true;
 				if (!chronicle.isLive())
@@ -515,11 +531,40 @@ public class CodexSessionChroniclePlugin extends Plugin
 					saveCurrent();
 				}
 			}
+			if (!chronicle.isLive())
+			{
+				// Logged out, so no tick will show it: the week card's worth line has moved.
+				publish();
+			}
 		}
 		catch (RuntimeException e)
 		{
 			log.debug("Could not read Codex Ledger's worth", e);
 		}
+	}
+
+	/** Reads Codex Ledger's saved book for this profile and keeps it for the week card; null without Ledger. */
+	private LedgerWorth readLedgerBook()
+	{
+		ledgerBook = null;
+		if (profile == null)
+		{
+			return null;
+		}
+		String json = configManager.getRSProfileConfiguration(LEDGER_GROUP, LEDGER_KEY);
+		if (json == null || json.isEmpty())
+		{
+			return null;
+		}
+		try
+		{
+			ledgerBook = gson.fromJson(json, LedgerWorth.class);
+		}
+		catch (RuntimeException e)
+		{
+			log.debug("Could not read Codex Ledger's book", e);
+		}
+		return ledgerBook;
 	}
 
 	@Subscribe
@@ -612,8 +657,34 @@ public class CodexSessionChroniclePlugin extends Plugin
 		publish();
 	}
 
+	/**
+	 * Sets the next wake-up for just after local midnight. The delay is worked out afresh each day from the
+	 * zone's own calendar, so a day of 23 or 25 hours at a clock change still wakes at midnight.
+	 */
+	private void scheduleMidnight()
+	{
+		if (!running)
+		{
+			return;
+		}
+		long delay = Midnight.untilNext(System.currentTimeMillis(), ZoneId.systemDefault()) + Midnight.SLACK_MS;
+		midnight = executor.schedule(() ->
+		{
+			if (running)
+			{
+				clientThread.invoke(this::publish);
+				scheduleMidnight();
+			}
+		}, delay, TimeUnit.MILLISECONDS);
+	}
+
 	private void checkExpiry()
 	{
+		// A computer asleep through midnight wakes its timer late; the day is checked here too.
+		if (publishedDay != Long.MIN_VALUE && Midnight.day(System.currentTimeMillis(), ZoneId.systemDefault()) != publishedDay)
+		{
+			publish();
+		}
 		Session closed = chronicle.expire(System.currentTimeMillis(), config.breakMinutes() * 60_000L);
 		if (closed != null)
 		{
@@ -833,6 +904,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			log.warn("Could not read the saved chronicle, starting it afresh", e);
 		}
 		summarisePast();
+		readLedgerBook();
 		// A session left open when the client closed may have ended long ago.
 		Session closed = chronicle.expire(System.currentTimeMillis(), config.breakMinutes() * 60_000L);
 		if (closed != null)
@@ -938,7 +1010,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			ticker.show(null);
 		}
-		Journal.Records records = Journal.records(journal, copy, System.currentTimeMillis(), ZoneId.systemDefault());
+		long now = System.currentTimeMillis();
+		ZoneId zone = ZoneId.systemDefault();
+		publishedDay = Midnight.day(now, zone);
+		Journal.Records records = Journal.records(journal, copy, now, zone);
+		Week week = Week.of(journal, copy, now, zone, ledgerBook);
 		Player player = client.getLocalPlayer();
 		String name = client.getGameState() == GameState.LOGGED_IN && player != null ? player.getName() : null;
 		List<Summary> past = pastSummaries;
@@ -946,12 +1022,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 		if (target != null)
 		{
 			Summary shown = live;
-			SwingUtilities.invokeLater(() -> target.update(shown, past, records, name));
+			SwingUtilities.invokeLater(() -> target.update(shown, past, records, week, name));
 		}
 	}
 
 	/** Asks where to save the card with RuneLite's own file chooser, then writes it there; runs on the Swing thread. */
-	private void saveCard(BufferedImage card, Summary session)
+	private void saveCard(BufferedImage card, String fileName)
 	{
 		List<Filepath> chosen = new Filepath.Chooser()
 			.setIsSave()
@@ -959,7 +1035,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			.setDialogTitle("Save session card")
 			.addExtensionFilter("PNG image", "png")
 			.setDefaultExtension("png")
-			.setFileName("Session " + Format.file(session.getStartedAt()) + ".png")
+			.setFileName(fileName)
 			.showDialog(panel);
 		if (chosen == null || chosen.isEmpty())
 		{

@@ -59,7 +59,7 @@ public final class ShareCard
 		return image;
 	}
 
-	private static void frame(Graphics2D g, int h)
+	static void frame(Graphics2D g, int h)
 	{
 		int w = WIDTH;
 		RoundRectangle2D page = new RoundRectangle2D.Float(0, 0, w, h, 18, 18);
@@ -131,8 +131,11 @@ public final class ShareCard
 		FontMetrics bold = g.getFontMetrics();
 		if (named)
 		{
-			Ui.shadowed(g, Ui.clip(headline, bold, w), x, y + bold.getAscent(), Theme.TEXT);
-			y += bold.getHeight();
+			for (String line : Ui.lines(headline, bold, w, 2))
+			{
+				Ui.shadowed(g, line, x, y + bold.getAscent(), Theme.TEXT);
+				y += bold.getHeight();
+			}
 		}
 		else
 		{
@@ -155,7 +158,7 @@ public final class ShareCard
 		colors.add(Theme.LOOT);
 		if (s.getKills() > 0)
 		{
-			tiles.add(new String[]{String.valueOf(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
+			tiles.add(new String[]{Format.count(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
 			colors.add(Theme.KILLS);
 		}
 		if (s.getLevels() > 0 || s.getKills() == 0)
@@ -242,13 +245,16 @@ public final class ShareCard
 			y += 24;
 			int top = kills.get(0).count();
 			int shown = Math.min(KILLS, kills.size());
-			// One line of kills spans the page, so its count sits at the edge like the skills above.
-			int colW = shown == 1 ? w : (w - 16) / 2;
+			// Kills sit two to a line, unless a name would be cut short there: then each has the page's width,
+			// as does a single kill, so its count sits at the edge like the skills above.
+			boolean wide = shown == 1 || !KillRow.fits(g, kills.subList(0, shown), (w - 16) / 2);
+			int columns = wide ? 1 : 2;
+			int colW = wide ? w : (w - 16) / 2;
 			for (int i = 0; i < shown; i++)
 			{
-				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % 2) * (colW + 16), y + (i / 2) * 20, colW);
+				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % columns) * (colW + 16), y + (i / columns) * 20, colW);
 			}
-			y += ((shown + 1) / 2) * 20 + 6;
+			y += ((shown + columns - 1) / columns) * 20 + 6;
 		}
 
 		List<Moment> highlights = new ArrayList<>(s.getHighlights());
@@ -275,13 +281,20 @@ public final class ShareCard
 				g.setFont(Theme.body());
 				FontMetrics fm = g.getFontMetrics();
 				Ui.shadowed(g, Ui.clip(m.getTitle(), fm, right - tx), tx, y + fm.getAscent() - 2, Theme.mix(Theme.TEXT, color, 0.3));
+				int extra = 0;
 				if (m.getDetail() != null)
 				{
 					g.setFont(Theme.small());
 					g.setColor(Theme.TEXT_MUTED);
-					g.drawString(Ui.clip(m.getDetail(), small, right - tx), tx, y + fm.getAscent() + small.getAscent());
+					// A detail such as where a drop came from may take two lines rather than lose its value.
+					List<String> detail = Ui.lines(m.getDetail(), small, right - tx, 2);
+					for (int l = 0; l < detail.size(); l++)
+					{
+						g.drawString(detail.get(l), tx, y + fm.getAscent() + small.getAscent() + l * small.getHeight());
+					}
+					extra = Math.max(0, detail.size() - 1) * small.getHeight();
 				}
-				y += 32;
+				y += 32 + extra;
 			}
 		}
 
@@ -346,13 +359,13 @@ public final class ShareCard
 		return best == null ? "" : best.getSkill() + " " + best.getLevel();
 	}
 
-	private static void header(Graphics2D g, String text, String trailing, int x, int y, int w)
+	static void header(Graphics2D g, String text, String trailing, int x, int y, int w)
 	{
 		g.setFont(Theme.small());
 		SectionHeader.paint(g, text.toUpperCase(Locale.ROOT), trailing, x, y, w, 20);
 	}
 
-	private static void rule(Graphics2D g, int x, int y, int w)
+	static void rule(Graphics2D g, int x, int y, int w)
 	{
 		g.setStroke(new BasicStroke(1f));
 		g.setPaint(new GradientPaint(x, 0, Theme.alpha(Theme.GOLD, 0), x + w / 2f, 0, Theme.alpha(Theme.GOLD, 150), true));
@@ -360,7 +373,7 @@ public final class ShareCard
 		diamond(g, x + w / 2f, y, 3, Theme.GOLD);
 	}
 
-	private static void diamond(Graphics2D g, float cx, float cy, float r, Color color)
+	static void diamond(Graphics2D g, float cx, float cy, float r, Color color)
 	{
 		Path2D d = new Path2D.Float();
 		d.moveTo(cx, cy - r);
