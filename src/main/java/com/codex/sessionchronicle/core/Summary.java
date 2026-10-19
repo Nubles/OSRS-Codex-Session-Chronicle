@@ -5,7 +5,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.EnumMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,9 +47,24 @@ public final class Summary
 	private final int otherDrops;
 	private final List<Session.SkillLine> skills;
 	private final List<Session.Drop> drops;
+	/** Every kill line, opened loot included, for telling what the session was about. */
 	private final List<Session.KillLine> killLines;
+	private final List<Session.KillLine> realKills;
+	private final Long worthChange;
+	private final List<Trip> trips;
+	private final int tripCount;
+	private final long tripMs;
+	private final long bestTripMs;
+	private final long outFor;
+	private final List<Session.KillLine> opened;
 	private final List<Moment> moments;
 	private final List<Moment> highlights;
+	private final Goal goal;
+	private final long goalProgress;
+	private final SlayerTask slayer;
+	private final List<SlayerTask> slayerDone;
+	private List<Pace.Line> pace = Collections.emptyList();
+	private Map<Goal.Kind, List<Goal.Preset>> presets = Collections.emptyMap();
 
 	private Summary(Session s, State state)
 	{
@@ -89,6 +106,14 @@ public final class Summary
 		}
 		killList.sort(Comparator.comparingInt(Session.KillLine::count).reversed());
 		killLines = Collections.unmodifiableList(killList);
+		List<Session.KillLine> real = new ArrayList<>();
+		List<Session.KillLine> open = new ArrayList<>();
+		for (Session.KillLine line : killList)
+		{
+			(line.isKill() ? real : open).add(line);
+		}
+		realKills = Collections.unmodifiableList(real);
+		opened = Collections.unmodifiableList(open);
 
 		List<Moment> momentList = new ArrayList<>(s.moments);
 		momentList.sort(Comparator.comparingLong(Moment::getAt));
@@ -97,11 +122,55 @@ public final class Summary
 		List<Moment> best = new ArrayList<>(s.moments);
 		best.sort(Comparator.comparingDouble(Moment::rank).reversed().thenComparingLong(Moment::getAt));
 		highlights = Collections.unmodifiableList(best);
+		worthChange = s.worthChange();
+		trips = Collections.unmodifiableList(new ArrayList<>(s.trips == null ? Collections.emptyList() : s.trips));
+		tripCount = s.tripCount;
+		tripMs = s.tripMs;
+		bestTripMs = s.bestTripMs;
+		outFor = s.out == null ? -1 : Math.max(0, s.playedMs - s.out.from);
+		goal = s.getGoal();
+		goalProgress = goal == null ? 0 : Goal.progress(s, goal.getKind());
+		slayer = s.slayer;
+		slayerDone = s.getSlayerDone();
+	}
+
+	/** The slayer task under way as last seen, or null. */
+	public SlayerTask getSlayer()
+	{
+		return slayer;
+	}
+
+	/** Slayer tasks finished in the session, oldest first. */
+	public List<SlayerTask> getSlayerDone()
+	{
+		return slayerDone;
 	}
 
 	public static Summary of(Session session, State state)
 	{
 		return new Summary(session, state);
+	}
+
+	/**
+	 * A telling that also sets the session's pace beside the player's own earlier sessions and,
+	 * for a live session without a goal, offers goals to set.
+	 *
+	 * @param journal finished sessions; only those that began before this one are compared
+	 */
+	public static Summary of(Session session, State state, List<Session> journal)
+	{
+		Summary summary = new Summary(session, state);
+		summary.pace = Collections.unmodifiableList(Pace.of(session, journal));
+		if (state != State.ENDED && session.getGoal() == null)
+		{
+			Map<Goal.Kind, List<Goal.Preset>> offered = new EnumMap<>(Goal.Kind.class);
+			for (Goal.Kind kind : Goal.Kind.values())
+			{
+				offered.put(kind, Goal.presets(kind, session, journal));
+			}
+			summary.presets = Collections.unmodifiableMap(offered);
+		}
+		return summary;
 	}
 
 	/** A short fingerprint of everything the panel draws, to tell when a summary has really changed. */
@@ -112,7 +181,9 @@ public final class Summary
 			return "none";
 		}
 		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
-			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player;
+			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player
+			+ "/" + (s.goal == null ? "-" : s.goal.getKind() + ":" + s.goal.getTarget() + ":" + s.goal.isReached())
+			+ "/" + s.pace.size() + "/" + s.presets.size();
 	}
 
 	public State getState()
@@ -186,7 +257,70 @@ public final class Summary
 	/** What was killed or cleared, most first. */
 	public List<Session.KillLine> getKillLines()
 	{
-		return killLines;
+		return realKills;
+	}
+
+	/** The trips kept, oldest first; a filed session keeps only their totals. */
+	public List<Trip> getTrips()
+	{
+		return trips;
+	}
+
+	/** Trips that brought something home. */
+	public int getTripCount()
+	{
+		return tripCount;
+	}
+
+	/** The average trip in play time, or 0 with no trips. */
+	public long averageTripMs()
+	{
+		return tripCount <= 0 ? 0 : tripMs / tripCount;
+	}
+
+	/** The quickest trip in play time, or 0. */
+	public long getBestTripMs()
+	{
+		return bestTripMs;
+	}
+
+	/** Play time on the trip under way, or -1 at the bank. */
+	public long getOutFor()
+	{
+		return outFor;
+	}
+
+	/** Kills, loot or experience brought home per trip on average, over the trips kept. */
+	public double perTrip(Goal.Kind kind)
+	{
+		if (trips.isEmpty())
+		{
+			return 0;
+		}
+		double sum = 0;
+		for (Trip t : trips)
+		{
+			sum += kind == Goal.Kind.KILLS ? t.kills : kind == Goal.Kind.LOOT ? t.loot : t.xp;
+		}
+		return sum / trips.size();
+	}
+
+	/** How the net worth moved by Codex Ledger, or null when it is not installed or did not say. */
+	public Long getWorthChange()
+	{
+		return worthChange;
+	}
+
+	/** Net worth gained an hour, or 0 for a session too short to say. */
+	public long worthPerHour()
+	{
+		return worthChange == null ? 0 : perHour(worthChange);
+	}
+
+	/** Bird nests, crates and caskets opened, most first: loot that came without a kill. */
+	public List<Session.KillLine> getOpenedLines()
+	{
+		return opened;
 	}
 
 	/** Moments in the order they happened. */
@@ -199,6 +333,55 @@ public final class Summary
 	public List<Moment> getHighlights()
 	{
 		return highlights;
+	}
+
+	/** The session's goal, or null. */
+	public Goal getGoal()
+	{
+		return goal;
+	}
+
+	/** How far the session has come toward its goal, in the goal's own unit. */
+	public long getGoalProgress()
+	{
+		return goalProgress;
+	}
+
+	/** Its pace beside the player's earlier sessions of the same kind; empty when too short or not asked for. */
+	public List<Pace.Line> getPace()
+	{
+		return pace;
+	}
+
+	/** Goals offered for each kind, for a live session that has none. */
+	public Map<Goal.Kind, List<Goal.Preset>> getPresets()
+	{
+		return presets;
+	}
+
+	/** The goal's rate of progress an hour, from the session so far; 0 before rates mean anything. */
+	public long goalPerHour()
+	{
+		if (goal == null)
+		{
+			return 0;
+		}
+		return goal.getKind() == Goal.Kind.TIME ? 3_600_000L : perHour(goalProgress);
+	}
+
+	/** Play time still needed for the goal at the session's pace so far, or -1 when it cannot be told. */
+	public long goalEtaMs()
+	{
+		long rate = goalPerHour();
+		if (goal == null || goal.isReached())
+		{
+			return 0;
+		}
+		if (rate <= 0)
+		{
+			return -1;
+		}
+		return Math.round((goal.getTarget() - goalProgress) * 3_600_000.0 / rate);
 	}
 
 	public long xpPerHour()
@@ -294,6 +477,24 @@ public final class Summary
 			return "A haul worth " + Chronicle.coins(lootValue);
 		}
 		return "A quiet session";
+	}
+
+	/** What one of a kill line counts, in the plural: "kills", "clears" for raids and runs, "clues" for caskets. */
+	public static String noun(String name)
+	{
+		if (CLUE.matcher(name).matches())
+		{
+			return "clues";
+		}
+		String key = Chronicle.key(name);
+		for (String raid : CLEARS)
+		{
+			if (key.startsWith(raid))
+			{
+				return "clears";
+			}
+		}
+		return "kills";
 	}
 
 	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */

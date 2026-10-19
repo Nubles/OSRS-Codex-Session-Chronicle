@@ -1,7 +1,9 @@
 package com.codex.sessionchronicle.ui;
 
 import com.codex.sessionchronicle.core.Journal;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Summary;
+import com.codex.sessionchronicle.core.Week;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
@@ -34,6 +36,9 @@ public class ChroniclePanel extends PluginPanel
 	private final Crest crest = new Crest();
 	private final Segmented tabs = new Segmented(true, "Session", "Journal", "Card");
 	private final Segmented metrics = new Segmented(false, JournalView.METRICS);
+	private final Segmented goalKinds = new Segmented(false, GoalView.KINDS);
+	/** Which card the Card tab shows: the session's, or the week's. */
+	private final Segmented cardKind = new Segmented(false, "This session", "This week");
 	private final CardLayout cards = new CardLayout();
 	private final JPanel content = new JPanel(cards);
 	private final JScrollPane session = scroller();
@@ -43,8 +48,10 @@ public class ChroniclePanel extends PluginPanel
 	private Summary live;
 	private List<Summary> past = Collections.emptyList();
 	private Journal.Records records;
+	private Week week;
 	private String playerName;
 	private boolean showName = true;
+	private boolean showWorth;
 	private int open = -1;
 	private int tab;
 	private String cardNote;
@@ -54,6 +61,8 @@ public class ChroniclePanel extends PluginPanel
 	/** What the Session and Card tabs last drew, so an unchanged session is not built again. */
 	private String sessionDrawn;
 	private String cardDrawn;
+	/** What the Journal tab last drew; it is built again only when its figures move, and only while it is open. */
+	private String journalDrawn;
 
 	public ChroniclePanel(ItemIcons items, Icons icons, CardActions actions, SessionActions sessionActions)
 	{
@@ -83,6 +92,8 @@ public class ChroniclePanel extends PluginPanel
 
 		tabs.onChange(this::showTab);
 		metrics.onChange(i -> rebuildJournal());
+		cardKind.onChange(i -> rebuildCard(true));
+		goalKinds.onChange(i -> rebuildSession(true));
 		rebuild();
 	}
 
@@ -106,6 +117,14 @@ public class ChroniclePanel extends PluginPanel
 	 */
 	public void update(Summary live, List<Summary> past, Journal.Records records, String playerName)
 	{
+		update(live, past, records, week, playerName);
+	}
+
+	/**
+	 * @param week the last seven days, for the week card; null keeps the one shown
+	 */
+	public void update(Summary live, List<Summary> past, Journal.Records records, Week week, String playerName)
+	{
 		boolean journalChanged = past != this.past;
 		if (journalChanged && open >= 0)
 		{
@@ -123,6 +142,10 @@ public class ChroniclePanel extends PluginPanel
 		this.live = live;
 		this.past = past;
 		this.records = records;
+		if (week != null)
+		{
+			this.week = week;
+		}
 		this.playerName = playerName;
 		if (!isShowing())
 		{
@@ -152,7 +175,12 @@ public class ChroniclePanel extends PluginPanel
 		}
 		if (journalChanged)
 		{
-			rebuildJournal();
+			journalDrawn = null;
+		}
+		if (tab == 1 || journalDrawn == null)
+		{
+			// Today and the week move with the session being lived, and roll over at midnight.
+			rebuildJournalIfMoved();
 		}
 		if (tab == 2)
 		{
@@ -171,7 +199,8 @@ public class ChroniclePanel extends PluginPanel
 		}
 		sessionDrawn = drawn;
 		replace(session, open >= 0 ? SessionView.build(s, items, icons, this::backToLive, this::removeOpen, null)
-			: SessionView.build(s, items, icons, null, null, sessionActions::endSession));
+			: SessionView.build(s, items, icons, null, null, sessionActions::endSession, goalKinds, sessionActions::setGoal,
+				sessionActions::clearGoal));
 	}
 
 	private void removeOpen()
@@ -192,6 +221,16 @@ public class ChroniclePanel extends PluginPanel
 		}
 	}
 
+	/** Whether the week's card and its text copy show how the net worth moved, by Codex Ledger. */
+	public void setShowWorth(boolean showWorth)
+	{
+		this.showWorth = showWorth;
+		if (tab == 2)
+		{
+			rebuildCard(true);
+		}
+	}
+
 	/** A line under the card's buttons, such as where it was saved. */
 	public void cardNote(String note)
 	{
@@ -205,11 +244,22 @@ public class ChroniclePanel extends PluginPanel
 		tab = index;
 		tabs.setSelected(index, false);
 		cards.show(content, TABS[index]);
+		if (index == 1)
+		{
+			rebuildJournalIfMoved();
+		}
 		if (index == 2)
 		{
 			cardNote = null;
 			rebuildCard(true);
 		}
+	}
+
+	/** Shows the session's card (0) or the week's (1) on the Card tab, for previews and tests. */
+	public void showCard(int kind)
+	{
+		cardKind.setSelected(kind, false);
+		showTab(2);
 	}
 
 	/** Opens a session from the journal on the Session tab. */
@@ -245,8 +295,34 @@ public class ChroniclePanel extends PluginPanel
 		rebuildJournal();
 	}
 
+	/** Builds the Journal tab again when the figures it shows have moved since it was drawn. */
+	private void rebuildJournalIfMoved()
+	{
+		String drawn = journalKey();
+		if (!drawn.equals(journalDrawn))
+		{
+			rebuildJournal();
+		}
+	}
+
+	/** The Journal tab's figures, rounded as they are shown, so a moving session rebuilds it about once a minute. */
+	private String journalKey()
+	{
+		if (records == null)
+		{
+			return "none";
+		}
+		Journal.Today t = records.getToday();
+		return System.identityHashCode(past) + "/" + t.getSessions() + "/" + t.getPlayedMs() / 60_000 + "/" + Format.xp(t.getXp())
+			+ "/" + Format.coins(t.getLoot()) + "/" + t.getKills() + "/" + t.getTopSkill() + "/" + records.getWeekPlayedMs() / 60_000
+			+ "/" + records.getWeekSessions() + "/" + records.getStreakDays() + "/" + records.getLongestStreak()
+			+ "/" + (records.getMostXp() == null ? 0 : records.getMostXp().getStartedAt())
+			+ "/" + (records.getMostLoot() == null ? 0 : records.getMostLoot().getStartedAt()) + "/" + records.getBests().size();
+	}
+
 	private void rebuildJournal()
 	{
+		journalDrawn = journalKey();
 		if (records == null)
 		{
 			replace(journal, SessionView.note("The journal is empty", "Sessions are filed here as they end."));
@@ -257,21 +333,29 @@ public class ChroniclePanel extends PluginPanel
 
 	private void rebuildCard(boolean force)
 	{
+		if (cardKind.getSelected() == 1)
+		{
+			rebuildWeekCard(force);
+			return;
+		}
 		Summary s = shown();
 		if (s == null && !past.isEmpty())
 		{
 			s = past.get(0);
 		}
 		// The card is a large picture; only paint it again when the session on it has moved on.
-		String drawn = s == null ? "none" : showName + "/" + s.getState() + "/" + s.getStartedAt() + "/" + s.getPlayedMs() / 60_000
+		String drawn = s == null ? "none" : "session/" + showName + "/" + s.getState() + "/" + s.getStartedAt() + "/" + s.getPlayedMs() / 60_000
 			+ "/" + Format.xp(s.getTotalXp()) + "/" + Format.coins(s.getLootValue()) + "/" + s.getKills() + "/" + s.getLevels()
-			+ "/" + s.getMoments().size() + "/" + s.getDrops().size() + "/" + s.getDeaths() + "/" + open;
+			+ "/" + s.getMoments().size() + "/" + s.getDrops().size() + "/" + s.getDeaths() + "/" + open
+			+ "/" + (s.getGoal() == null ? "-" : s.getGoal().describe() + s.getGoal().isReached() + Math.round(GoalView.share(s, s.getGoal()) * 100))
+			+ "/" + paceKey(s);
 		if (!force && drawn.equals(cardDrawn))
 		{
 			return;
 		}
 		cardDrawn = drawn;
 		StackPanel stack = new StackPanel(8, 8);
+		stack.add(cardKind);
 		if (s == null)
 		{
 			stack.add(SessionView.note("Nothing to share yet", "Once your session has some experience, loot or kills in it, its card appears here, ready to save or copy."));
@@ -282,15 +366,74 @@ public class ChroniclePanel extends PluginPanel
 		cardImage = ShareCard.render(s, showName, items, icons, () -> SwingUtilities.invokeLater(this::refreshCardImage));
 		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
 		buttons.setOpaque(false);
-		buttons.add(new CodexButton("Save card", true, () -> actions.save(cardImage, shownSession)));
+		buttons.add(new CodexButton("Save card", true, () -> actions.save(cardImage, "Session " + Format.file(shownSession.getStartedAt()) + ".png")));
 		buttons.add(new CodexButton("Copy to clipboard", false, () -> actions.copy(cardImage)));
 		stack.add(new SectionHeader(open >= 0 ? "From the journal" : s.getState() == Summary.State.LIVE ? "Live session" : "Last session",
 			Format.day(s.getStartedAt())));
 		stack.add(new CardPreview(cardImage));
 		stack.add(buttons);
-		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste.";
+		JPanel text = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+		text.setOpaque(false);
+		text.add(new CodexButton("Copy as text", false, () -> actions.copyText(Recap.text(shownSession, showName))));
+		stack.add(text);
+		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste; "
+			+ "as text it is a few lines for a chat or a post.";
 		stack.add(Ui.wrapped(note, Theme.small(), cardNote != null ? Theme.TEAL : Theme.TEXT_FAINT, SessionView.WIDTH - 10));
 		replace(card, stack);
+	}
+
+	/** The Card tab with the week's card: the last seven days, to save or copy like a session's. */
+	private void rebuildWeekCard(boolean force)
+	{
+		// Worth stays off a card to share unless the player asks for it.
+		Week w = week == null || showWorth ? week : week.withoutWorth();
+		String drawn = w == null || w.isEmpty() ? "week/none" : "week/" + showName + "/" + w.getLast() + "/" + w.getSessions()
+			+ "/" + w.getPlayedMs() / 60_000 + "/" + Format.xp(w.getXp()) + "/" + Format.coins(w.getLoot()) + "/" + w.getKills()
+			+ "/" + w.getLevels() + "/" + w.getHighlights().size() + "/" + w.getDeaths() + "/" + w.getActivities().size()
+			+ "/" + (w.worthChange() == null ? "-" : Format.coins(w.worthChange())) + "/" + w.getPlayer();
+		if (!force && drawn.equals(cardDrawn))
+		{
+			return;
+		}
+		cardDrawn = drawn;
+		StackPanel stack = new StackPanel(8, 8);
+		stack.add(cardKind);
+		if (w == null || w.isEmpty())
+		{
+			stack.add(SessionView.note("A quiet week", "Play a session and the week's card appears here: each day's play, what the week went on, "
+				+ "its best moments and, with Codex Ledger and Worth on cards, how your net worth moved."));
+			replace(card, stack);
+			return;
+		}
+		cardImage = WeekCard.render(w, showName, items, icons, () -> SwingUtilities.invokeLater(this::refreshCardImage));
+		JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
+		buttons.setOpaque(false);
+		BufferedImage shownImage = cardImage;
+		String file = "Week to " + w.getLast() + ".png";
+		buttons.add(new CodexButton("Save card", true, () -> actions.save(shownImage, file)));
+		buttons.add(new CodexButton("Copy to clipboard", false, () -> actions.copy(shownImage)));
+		stack.add(new SectionHeader("The last seven days", WeekCard.range(w)));
+		stack.add(new CardPreview(cardImage));
+		stack.add(buttons);
+		JPanel text = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+		text.setOpaque(false);
+		boolean named = showName;
+		text.add(new CodexButton("Copy as text", false, () -> actions.copyText(Recap.week(w, named))));
+		stack.add(text);
+		String note = cardNote != null ? cardNote : "Every session begun in the last seven days, the one under way included.";
+		stack.add(Ui.wrapped(note, Theme.small(), cardNote != null ? Theme.TEAL : Theme.TEXT_FAINT, SessionView.WIDTH - 10));
+		replace(card, stack);
+	}
+
+	/** The pace lines as the card shows them, rounded so a moving rate does not repaint it every refresh. */
+	private static String paceKey(Summary s)
+	{
+		StringBuilder key = new StringBuilder();
+		for (Pace.Line line : s.getPace())
+		{
+			key.append(Format.amount(line.getRate())).append(',');
+		}
+		return key.toString();
 	}
 
 	private boolean refreshPending;

@@ -116,7 +116,10 @@ public final class Theme
 			case TASK:
 				return new Color(150, 170, 230);
 			case BEST:
+			case RECORD:
 				return EMBER;
+			case GOAL:
+				return TEAL;
 			case LEVEL:
 				return GREEN;
 			case DEATH:

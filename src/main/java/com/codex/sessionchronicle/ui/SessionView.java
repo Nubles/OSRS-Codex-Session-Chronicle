@@ -1,12 +1,18 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
+import com.codex.sessionchronicle.core.Trip;
+import java.util.ArrayList;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Locale;
+import java.util.function.BiConsumer;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -30,6 +36,17 @@ final class SessionView
 	 * @param end closes the live session now; null for an older one
 	 */
 	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end)
+	{
+		return build(s, items, icons, backToLive, remove, end, null, null, null);
+	}
+
+	/**
+	 * @param goalKinds the strip that picks which kind of goal to offer
+	 * @param setGoal sets a goal on the live session; null for an older one
+	 * @param clearGoal clears the live session's goal; null for an older one
+	 */
+	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end,
+		Segmented goalKinds, BiConsumer<Goal.Kind, Long> setGoal, Runnable clearGoal)
 	{
 		StackPanel stack = new StackPanel(8, 8);
 		if (backToLive != null)
@@ -58,7 +75,8 @@ final class SessionView
 		JPanel lines = new JPanel();
 		lines.setOpaque(false);
 		lines.setLayout(new BoxLayout(lines, BoxLayout.Y_AXIS));
-		JLabel headline = Ui.label(s.headline(), Theme.title(), Theme.GOLD_BRIGHT);
+		// The headline is the session's name; a long one wraps rather than losing its end.
+		JLabel headline = Ui.wrapped(s.headline(), Theme.title(), Theme.GOLD_BRIGHT, WIDTH - 22);
 		lines.add(headline);
 		lines.add(Ui.label(Format.duration(s.getPlayedMs()) + " played, " + Format.time(s.getStartedAt()) + " to "
 			+ (s.getState() == Summary.State.LIVE ? "now" : Format.time(s.getEndedAt())), Theme.small(), Theme.TEXT_MUTED));
@@ -67,8 +85,9 @@ final class SessionView
 
 		JPanel tiles = new JPanel(new GridLayout(2, 2, 6, 6));
 		tiles.setOpaque(false);
-		tiles.add(new StatTile(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()), Theme.XP));
-		tiles.add(new StatTile(Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), Theme.LOOT));
+		tiles.add(new StatTile(s.getTotalXp() > 0 ? Format.xp(s.getTotalXp()) : "0", "Experience", Format.rate(s.xpPerHour()),
+			s.getTotalXp() > 0 ? Theme.XP : Theme.TEXT_MUTED));
+		tiles.add(new StatTile(Format.coins(s.getLootValue()), "Loot", Format.rate(s.lootPerHour()), s.getLootValue() > 0 ? Theme.LOOT : Theme.TEXT_MUTED));
 		Session.SkillLine levelled = null;
 		for (Session.SkillLine line : s.getSkills())
 		{
@@ -77,10 +96,38 @@ final class SessionView
 				levelled = line;
 			}
 		}
-		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "none this time" : levelled.getSkill() + " " + levelled.getLevel(), Theme.GREEN));
+		tiles.add(new StatTile("+" + s.getLevels(), "Levels", levelled == null ? "none this time" : levelled.getSkill() + " " + levelled.getLevel(),
+			s.getLevels() > 0 ? Theme.GREEN : Theme.TEXT_MUTED));
 		List<Session.KillLine> killLines = s.getKillLines();
-		tiles.add(new StatTile(String.valueOf(s.getKills()), "Kills", killLines.isEmpty() ? "" : killLines.get(0).getName(), Theme.KILLS));
+		tiles.add(new StatTile(Format.count(s.getKills()), "Kills", killLines.isEmpty() ? "none this time" : killLines.get(0).getName(),
+			s.getKills() > 0 ? Theme.KILLS : Theme.TEXT_MUTED));
 		stack.add(tiles);
+
+		JComponent worth = worth(s);
+		if (worth != null)
+		{
+			stack.add(worth);
+		}
+
+		JComponent goal = goalKinds == null && s.getGoal() == null ? null : GoalView.build(s, goalKinds, setGoal, clearGoal);
+		if (goal != null)
+		{
+			stack.add(goal);
+		}
+
+		List<Pace.Line> pace = s.getPace();
+		if (!pace.isEmpty())
+		{
+			stack.add(new SectionHeader("Pace", "vs your past"));
+			for (Pace.Line line : pace)
+			{
+				stack.add(new PaceRow(line));
+			}
+		}
+
+		SlayerView.add(stack, s);
+
+		trips(stack, s);
 
 		List<Session.SkillLine> skills = s.getSkills();
 		if (!skills.isEmpty())
@@ -113,11 +160,28 @@ final class SessionView
 
 		if (!killLines.isEmpty())
 		{
-			stack.add(new SectionHeader("Kills", String.valueOf(s.getKills())));
+			stack.add(new SectionHeader("Kills", Format.count(s.getKills())));
 			int top = killLines.get(0).count();
 			for (int i = 0; i < killLines.size() && i < KILLS; i++)
 			{
-				stack.add(new KillRow(killLines.get(i), killLines.get(i).count() / (double) top));
+				stack.add(new KillRow(killLines.get(i), killLines.get(i).count() / (double) top, icons));
+			}
+		}
+
+		List<Session.KillLine> opened = s.getOpenedLines();
+		if (!opened.isEmpty())
+		{
+			// Nests, crates and caskets are no kills; they are listed apart so the Kills figure stays honest.
+			int total = 0;
+			for (Session.KillLine line : opened)
+			{
+				total += line.count();
+			}
+			stack.add(new SectionHeader("Opened", String.valueOf(total)));
+			int top = opened.get(0).count();
+			for (int i = 0; i < opened.size() && i < KILLS; i++)
+			{
+				stack.add(new KillRow(opened.get(i), opened.get(i).count() / (double) top, icons));
 			}
 		}
 
@@ -150,6 +214,106 @@ final class SessionView
 			stack.add(row);
 		}
 		return stack;
+	}
+
+	/** Codex Ledger's net worth over the session, set against the loot so the cost of the trip shows. */
+	static JComponent worth(Summary s)
+	{
+		Long change = s.getWorthChange();
+		if (change == null)
+		{
+			return null;
+		}
+		Card card = new Card(new BorderLayout(0, 3));
+		card.accent(change >= 0 ? Theme.GREEN : Theme.BLOOD);
+		JPanel top = new JPanel(new BorderLayout(6, 0));
+		top.setOpaque(false);
+		top.add(Ui.label("Net worth", Theme.body(), Theme.TEXT), BorderLayout.CENTER);
+		top.add(Ui.label(Format.signedCoins(change), Theme.body(), change >= 0 ? Theme.GREEN : Theme.BLOOD), BorderLayout.EAST);
+		card.add(top, BorderLayout.NORTH);
+		card.add(Ui.wrapped(worthLine(s.getLootValue(), change, s.worthPerHour()), Theme.small(), Theme.TEXT_MUTED, WIDTH - 30),
+			BorderLayout.CENTER);
+		card.setToolTipText("From Codex Ledger, as it last saved your net worth (every few minutes). It counts everything: loot, "
+			+ "supplies used, trades, deaths and prices moving.");
+		return card;
+	}
+
+	/** "Loot 4M, so about 800k went on supplies and the rest. 1.9M/hr." */
+	static String worthLine(long loot, long change, long perHour)
+	{
+		String rate = perHour != 0 ? " " + Format.signedCoins(perHour) + "/hr." : "";
+		long spent = loot - change;
+		if (loot <= 0)
+		{
+			return "Your worth by Codex Ledger since the session began." + rate;
+		}
+		if (spent > 0)
+		{
+			return "Loot " + Format.coins(loot) + ", so about " + Format.coins(spent) + " went on supplies and the rest." + rate;
+		}
+		return "More than the loot's " + Format.coins(loot) + ": sales or prices helped." + rate;
+	}
+
+	/** Trips out from the bank: how many, how long, what each brought, and the one under way. */
+	static void trips(StackPanel stack, Summary s)
+	{
+		int count = s.getTripCount();
+		if (count <= 0 && s.getOutFor() < 0)
+		{
+			return;
+		}
+		stack.add(new SectionHeader("Trips", count <= 0 ? "first one out" : count + (count == 1 ? " trip" : " trips")
+			+ ", " + Format.lap(s.averageTripMs()) + " each"));
+		List<Trip> trips = s.getTrips();
+		if (trips.size() >= 2)
+		{
+			boolean loot = s.perTrip(Goal.Kind.LOOT) > 0;
+			boolean kills = !loot && s.perTrip(Goal.Kind.KILLS) > 0;
+			List<BarChart.Bar> bars = new ArrayList<>();
+			int first = Math.max(0, trips.size() - 16);
+			int number = count - (trips.size() - first) + 1;
+			for (int i = first; i < trips.size(); i++, number++)
+			{
+				Trip t = trips.get(i);
+				long value = loot ? t.getLoot() : kills ? t.getKills() : t.getXp();
+				String what = loot ? Format.coins(t.getLoot()) + " loot" : kills ? t.getKills() + (t.getKills() == 1 ? " kill" : " kills")
+					: Format.xp(t.getXp()) + " xp";
+				bars.add(new BarChart.Bar(String.valueOf(number), "Trip " + number + ": " + Format.lap(t.getMs()) + ", " + what, value));
+			}
+			stack.add(new BarChart(bars, loot ? Theme.LOOT : kills ? Theme.KILLS : Theme.XP, null));
+		}
+		StringBuilder line = new StringBuilder();
+		if (s.getBestTripMs() > 0 && count > 1)
+		{
+			line.append("Quickest ").append(Format.lap(s.getBestTripMs())).append(".");
+		}
+		List<String> parts = new ArrayList<>();
+		double kills = s.perTrip(Goal.Kind.KILLS);
+		if (kills > 0)
+		{
+			parts.add(String.format(java.util.Locale.ENGLISH, kills >= 10 ? "%.0f kills" : "%.1f kills", kills));
+		}
+		double loot = s.perTrip(Goal.Kind.LOOT);
+		if (loot > 0)
+		{
+			parts.add(Format.coins(Math.round(loot)) + " loot");
+		}
+		else if (s.perTrip(Goal.Kind.XP) > 0)
+		{
+			parts.add(Format.xp(Math.round(s.perTrip(Goal.Kind.XP))) + " xp");
+		}
+		if (!parts.isEmpty())
+		{
+			line.append(line.length() > 0 ? " " : "").append(String.join(" and ", parts)).append(" a trip.");
+		}
+		if (s.getOutFor() >= 0 && s.getState() == Summary.State.LIVE)
+		{
+			line.append(line.length() > 0 ? " " : "").append("Out for ").append(Format.lap(s.getOutFor())).append(" now.");
+		}
+		if (line.length() > 0)
+		{
+			stack.add(Ui.wrapped(line.toString(), Theme.small(), Theme.TEXT_FAINT, WIDTH - 10));
+		}
 	}
 
 	static Card note(String title, String text)

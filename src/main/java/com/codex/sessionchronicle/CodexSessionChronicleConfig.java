@@ -90,14 +90,38 @@ public interface CodexSessionChronicleConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "goalChat",
+		name = "Goal reached in chat",
+		description = "Put a line in the chat box when the session reaches the goal you set for it",
+		position = 3,
+		section = display
+	)
+	default boolean goalChat()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "nameOnCard",
-		name = "Name on card",
-		description = "Write your character's name on the session card",
-		position = 2,
+		name = "Name on cards",
+		description = "Write your character's name on the session and week cards and their text copies; turn off to share them without it",
+		position = 4,
 		section = display
 	)
 	default boolean nameOnCard()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "worthOnCard",
+		name = "Worth on cards",
+		description = "Show how your net worth moved, by Codex Ledger, on the week card and its text copy; off, they can be shared without it",
+		position = 5,
+		section = display
+	)
+	default boolean worthOnCard()
+	{
+		return false;
 	}
 }

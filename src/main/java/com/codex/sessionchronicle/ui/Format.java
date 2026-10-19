@@ -17,30 +17,27 @@ public final class Format
 	{
 	}
 
-	/** "8,240", "41.2k", "412k", "1.24M". */
+	/**
+	 * At one precision per unit, so figures side by side read alike: "8,240", "41k", "412k", "2.2M",
+	 * "897.0M", "1.53B". Thousands are whole; millions keep their one decimal even when it is a zero
+	 * ("897.0M" beside "810.9M", never "897M").
+	 */
 	public static String amount(long n)
 	{
 		if (n < 10_000)
 		{
 			return String.format(Locale.ENGLISH, "%,d", n);
 		}
-		if (n < 100_000)
-		{
-			return trim(n / 1_000.0, 1) + "k";
-		}
-		if (n < 1_000_000)
+		// A figure that rounds up to a thousand of one unit is written in the next ("1.0M", not "1000k").
+		if (n < 999_500)
 		{
 			return Math.round(n / 1_000.0) + "k";
 		}
-		if (n < 10_000_000)
+		if (n < 999_950_000)
 		{
-			return trim(n / 1_000_000.0, 2) + "M";
+			return fixed(n / 1_000_000.0, 1) + "M";
 		}
-		if (n < 1_000_000_000)
-		{
-			return trim(n / 1_000_000.0, 1) + "M";
-		}
-		return trim(n / 1_000_000_000.0, 2) + "B";
+		return fixed(n / 1_000_000_000.0, 2) + "B";
 	}
 
 	/** Gained experience with its sign: "+412k". */
@@ -54,14 +51,9 @@ public final class Format
 		return amount(Math.max(0, gp));
 	}
 
-	private static String trim(double value, int places)
+	private static String fixed(double value, int places)
 	{
-		String text = String.format(Locale.ENGLISH, "%." + places + "f", value);
-		while (text.contains(".") && (text.endsWith("0") || text.endsWith(".")))
-		{
-			text = text.substring(0, text.length() - 1);
-		}
-		return text;
+		return String.format(Locale.ENGLISH, "%." + places + "f", value);
 	}
 
 	/** "312k/hr", or "" when there is no rate yet. */
@@ -83,6 +75,25 @@ public final class Format
 			return minutes + "m";
 		}
 		return minutes / 60 + "h " + minutes % 60 + "m";
+	}
+
+	/** "11:20" for a trip, or "1:02:10" past the hour. */
+	public static String lap(long ms)
+	{
+		long seconds = Math.max(0, ms) / 1000;
+		long hours = seconds / 3600;
+		String rest = String.format(Locale.ENGLISH, "%02d", seconds % 60);
+		if (hours > 0)
+		{
+			return hours + ":" + String.format(Locale.ENGLISH, "%02d", seconds / 60 % 60) + ":" + rest;
+		}
+		return seconds / 60 + ":" + rest;
+	}
+
+	/** "+3.2M" or "-450k". */
+	public static String signedCoins(long gp)
+	{
+		return gp > 0 ? "+" + amount(gp) : gp < 0 ? "-" + amount(-gp) : "0";
 	}
 
 	/** "1:42" for a session clock. */
@@ -122,7 +133,13 @@ public final class Format
 		return FILE.format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()));
 	}
 
-	/** An item stack the way the game writes it: "950", "45K", "12M". */
+	/** A count with thousands marked, as the game's own kill counts are: "1,394". */
+	public static String count(long n)
+	{
+		return String.format(Locale.ENGLISH, "%,d", n);
+	}
+
+	/** An item stack, shortened where the game shortens it, with the suite's lowercase k: "950", "45k", "12M". */
 	public static String stack(long n)
 	{
 		if (n < 100_000)
@@ -131,7 +148,7 @@ public final class Format
 		}
 		if (n < 10_000_000)
 		{
-			return n / 1_000 + "K";
+			return n / 1_000 + "k";
 		}
 		return n / 1_000_000 + "M";
 	}

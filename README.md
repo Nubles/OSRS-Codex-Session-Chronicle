@@ -1,38 +1,60 @@
 # Codex Session Chronicle
 
-**Every play session, written down for you.** Codex Session Chronicle quietly keeps the story of each session as you play: the experience every skill gained, the levels you reached, the loot that dropped, what you killed and the moments worth telling. When the session ends it goes into a journal, and any session can be saved as a gilt-framed card to share.
+**Every play session, written down for you.** Codex Session Chronicle keeps the story of each session as you play: the experience every skill gained, the levels you reached, the loot that dropped, what you killed and the moments worth telling. When the session ends it goes into a journal, and any session or week can be shared as a card.
 
-It is the fifth plugin in the **Codex** suite, after [Codex Navigator](https://github.com/Nubles/OSRS-Codex-Navigator), [Codex Guardian](https://github.com/Nubles/OSRS-Codex-Guardian), [Codex Log Insight](https://github.com/Nubles/OSRS-Codex-Log-Insight) and [Codex Gear Roadmap](https://github.com/Nubles/OSRS-Codex-Gear-Roadmap), and shares their look: warm ink, aged gold and the game's own fonts.
+It is part of the **Codex** suite and shares its look: warm ink, aged gold and the game's own fonts.
 
 <p align="center">
-  <img src="docs/screenshots/session.png" width="225" alt="Session">
-  <img src="docs/screenshots/journal.png" width="225" alt="Journal">
-  <img src="docs/screenshots/card-tab.png" width="225" alt="Card">
+  <img src="docs/screenshots/session.png" width="225" alt="The Session tab">
+  <img src="docs/screenshots/journal.png" width="225" alt="The Journal tab">
+  <img src="docs/screenshots/card-tab.png" width="225" alt="The Card tab">
 </p>
 
-## What it does
+## What you get
 
-- **Session.** A clock that fills through each hour you play, then the session at a glance: a headline ("99 Ranged!", "Draconic visage!", "24 Vorkath kills", "Mining at 192k/hr"), experience and loot with their hourly rates, levels gained and kills. Below that, every skill you trained with the levels it rose through, your loot laid out like bank slots, kills with the game's own kill count, and a timeline of the session's moments. Changing activity? **End session** files it in the journal and starts a fresh one straight away.
-- **Moments.** Level ups and 99s, pets, new collection log slots, drops worth more than a value you choose, quests, achievement diaries, combat tasks, clue scrolls, personal bests and deaths (with what killed you), each with the time it happened. A big drop that is also a new log slot is one moment, not two.
-- **Journal.** Every finished session, newest first, with your records (most experience, most loot), your hours this week, your streak of days played, and a chart of recent sessions by experience, loot or time. Click any session to open it again, and **Remove** one you would rather not keep.
-- **Card.** The session as a picture: your name, the headline, totals, top skills, best loot, kills and highlights on a gilt-framed page, drawn at double scale so the pixel fonts stay crisp. Save it wherever you choose with RuneLite's file chooser, or copy it straight to the clipboard.
+- **Session.** A clock that fills through each hour you play, a headline ("99 Ranged!", "24 Vorkath kills", "Mining at 214k/hr"), experience and loot with their hourly rates, levels and kills, then every skill trained, the best loot and the session's moments.
+- **Pace.** Your main skill's experience an hour, kills an hour and loot an hour set beside your earlier sessions of the same kind: "Faster than your best", "About your usual".
+- **Goals.** Give the session a goal with one click (experience, loot, kills or play time), with offers drawn from your own journal, and see when you should reach it at your pace.
+- **Trips.** Each trip out from the bank and back, timed in play time, with what it brought; your average and quickest.
+- **Slayer.** Your task: how many are left, your kill rate and when it should be done.
+- **Moments.** Levels, pets, new collection log slots, valuable drops, quests, diaries, clue scrolls, personal bests and deaths, each with its time. Personal records (your fastest Mining yet, your quickest Vorkath trip, your richest session) become moments when a session ends.
+- **Journal.** The day so far, then every finished session, newest first, with your records and your activities.
+- **Cards.** The session, or the last seven days, as a picture to save or copy, or as text to paste into a chat.
 - **Ticker.** An optional slim plaque in the game view with the session's clock, experience and loot.
 
 <p align="center">
   <img src="docs/screenshots/card.png" width="360" alt="A session card">
+  <img src="docs/screenshots/week.png" width="360" alt="A week card">
 </p>
+<p align="center">
+  <img src="docs/screenshots/ticker.png" alt="The ticker">
+</p>
+
+## Settings that matter
+
+| Setting | What it does |
+| --- | --- |
+| Break allowance | Log back in within this long and the same session carries on; stay away longer and a new one begins. 15 minutes by default. |
+| Sessions kept | How many finished sessions the journal keeps for each account. |
+| Notable drop value | A single drop worth at least this many coins becomes one of the session's moments. |
+| Session ticker | The plaque in the game view. Off by default. |
+| Recap last session, Goal reached in chat | Lines in the chat box when a new session begins and when the session's goal is reached. |
+| Name on cards | Writes your character's name on the cards and their text. On by default. |
+| Worth on cards | Shows how your net worth moved, by Codex Ledger, on the week card. Off by default. |
+
+## With other Codex plugins
+
+Session Chronicle works on its own. With **[Codex Ledger](https://github.com/Nubles/OSRS-Codex-Ledger)** installed it reads (never writes) your saved net worth, so the Session tab can show how your worth moved set against the loot ("more than the loot: sales or prices helped"), and the week card can draw your worth over the week.
+
+Codex Ledger, Gear Roadmap and Navigator read the journal this plugin saves.
 
 ## How sessions work
 
-A session begins when you log in. If you log out and come back within the break allowance (15 minutes by default), the same session carries on; stay away longer and it is filed in the journal, and the next login begins a new one. World hops never end a session. Play time only counts while you are logged in, and so does experience: anything you gain on another device during a break is left out, so the rates stay honest.
-
-Experience is measured from your first reading of each skill in the session. Last Man Standing and the PvP Arena lend you stats for a while; those never count as progress. Loot comes from RuneLite's loot events, each item priced at the Grand Exchange price when it dropped. Monster kills are always seen; raids, chests and clue caskets come from RuneLite's Loot Tracker plugin, so keep it switched on to have them counted. Kills are counted from loot and from the game's kill count messages, whichever saw more, and the two are matched even when they spell a boss differently.
-
-When a new session begins, a line in the chat box recaps the one before. Both that and the ticker can be turned off in the settings, and the card can leave your name off.
+A session begins when you log in. World hops never end it, and logging out and back in within the break allowance carries it on. Play time only counts while you are logged in. Experience is measured from your first reading of each skill in the session, and loot is priced at the Grand Exchange price when it dropped. Sessions are saved per account in your RuneLite profile, also as the client closes. A journal damaged in part keeps every session that can still be read, and any journal that could not be read whole, or holds fields only a later version knows, is first copied aside (one copy, under `journalUnreadable`) so the next session filed never writes over the only copy.
 
 ## Rules posture
 
-Session Chronicle only reads what the game already shows you: your experience, loot events, and the game's own chat messages. It does not click, change menus or send anything over the network. Sessions are saved per account in your RuneLite profile (also as the client closes), and a card is only written when you press Save and pick where it goes.
+Session Chronicle only reads what the game already shows you: your experience, loot events and the game's own chat messages. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
 
 ## Development
 

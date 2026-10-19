@@ -10,6 +10,7 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.JComponent;
 
 /**
@@ -51,7 +52,7 @@ public class ItemGrid extends JComponent
 		}
 		Session.Drop d = drops.get(index);
 		String worth = d.value() > 0 ? ", worth " + Format.coins(d.value()) : "";
-		return d.getQuantity() > 1 ? d.getName() + " x " + String.format("%,d", d.getQuantity()) + worth : d.getName() + worth;
+		return d.getQuantity() > 1 ? d.getName() + " x " + String.format(Locale.ENGLISH, "%,d", d.getQuantity()) + worth : d.getName() + worth;
 	}
 
 	private int indexAt(int x, int y)

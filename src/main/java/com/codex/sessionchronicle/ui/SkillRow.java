@@ -8,6 +8,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
+import java.util.Locale;
 import javax.swing.JComponent;
 
 /** One skill's session: its icon and name, the levels it rose through, the experience, and its share of the whole. */
@@ -26,7 +27,7 @@ class SkillRow extends JComponent
 		this.perHour = perHour;
 		setOpaque(false);
 		setPreferredSize(new Dimension(10, 30));
-		setToolTipText(line.getSkill() + ": " + String.format("%,d", line.gained()) + " xp" + (perHour > 0 ? ", " + Format.rate(perHour) : ""));
+		setToolTipText(line.getSkill() + ": " + String.format(Locale.ENGLISH, "%,d", line.gained()) + " xp" + (perHour > 0 ? ", " + Format.rate(perHour) : ""));
 	}
 
 	@Override

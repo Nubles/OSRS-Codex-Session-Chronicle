@@ -104,7 +104,19 @@ public class SessionClock extends JComponent
 		g.setFont(Theme.title());
 		FontMetrics fm = g.getFontMetrics();
 		int textY = diameter / 2 + fm.getAscent() / 2 - 4;
-		Ui.shadowed(g, text, (diameter - fm.stringWidth(text)) / 2, textY, Theme.TEXT);
+		if ("-".equals(text))
+		{
+			// No session: the Chronicle's own seal rests in the well, waiting, rather than a lone dash.
+			java.awt.Composite was = g.getComposite();
+			g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.55f));
+			float seal = diameter * 0.36f;
+			Sigil.paint(g, c - seal / 2f, c - seal / 2f - 1, seal);
+			g.setComposite(was);
+		}
+		else
+		{
+			Ui.shadowed(g, text, (diameter - fm.stringWidth(text)) / 2, textY, Theme.TEXT);
+		}
 		if (!caption.isEmpty())
 		{
 			g.setFont(Theme.small());

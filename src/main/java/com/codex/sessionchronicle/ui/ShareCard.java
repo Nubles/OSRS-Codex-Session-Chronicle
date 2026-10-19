@@ -1,6 +1,8 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.Summary;
 import java.awt.BasicStroke;
@@ -15,6 +17,7 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 /**
@@ -31,6 +34,7 @@ public final class ShareCard
 	private static final int COLUMNS = 8;
 	private static final int KILLS = 4;
 	private static final int HIGHLIGHTS = 3;
+	private static final int PACE = 2;
 
 	private ShareCard()
 	{
@@ -55,7 +59,7 @@ public final class ShareCard
 		return image;
 	}
 
-	private static void frame(Graphics2D g, int h)
+	static void frame(Graphics2D g, int h)
 	{
 		int w = WIDTH;
 		RoundRectangle2D page = new RoundRectangle2D.Float(0, 0, w, h, 18, 18);
@@ -127,8 +131,11 @@ public final class ShareCard
 		FontMetrics bold = g.getFontMetrics();
 		if (named)
 		{
-			Ui.shadowed(g, Ui.clip(headline, bold, w), x, y + bold.getAscent(), Theme.TEXT);
-			y += bold.getHeight();
+			for (String line : Ui.lines(headline, bold, w, 2))
+			{
+				Ui.shadowed(g, line, x, y + bold.getAscent(), Theme.TEXT);
+				y += bold.getHeight();
+			}
 		}
 		else
 		{
@@ -151,7 +158,7 @@ public final class ShareCard
 		colors.add(Theme.LOOT);
 		if (s.getKills() > 0)
 		{
-			tiles.add(new String[]{String.valueOf(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
+			tiles.add(new String[]{Format.count(s.getKills()), "Kills", s.getKillLines().get(0).getName()});
 			colors.add(Theme.KILLS);
 		}
 		if (s.getLevels() > 0 || s.getKills() == 0)
@@ -170,6 +177,33 @@ public final class ShareCard
 			left += tw + gap;
 		}
 		y += tileH + 12;
+
+		Goal goal = s.getGoal();
+		if (goal != null)
+		{
+			y = goal(g, s, goal, x, y, w) + 12;
+		}
+
+		List<Pace.Line> pace = new ArrayList<>();
+		for (Pace.Line line : s.getPace())
+		{
+			// Only a comparison is worth telling; a first session of its kind has none.
+			if (line.getSamples() > 0 && pace.size() < PACE)
+			{
+				pace.add(line);
+			}
+		}
+		if (!pace.isEmpty())
+		{
+			header(g, "Pace", "vs past sessions", x, y, w);
+			y += 24;
+			for (Pace.Line line : pace)
+			{
+				PaceRow.paint(g, line, x, y, w, "my");
+				y += PaceRow.HEIGHT + 2;
+			}
+			y += 4;
+		}
 
 		List<Session.SkillLine> skillLines = s.getSkills();
 		if (!skillLines.isEmpty())
@@ -211,13 +245,17 @@ public final class ShareCard
 			y += 24;
 			int top = kills.get(0).count();
 			int shown = Math.min(KILLS, kills.size());
-			// One line of kills spans the page, so its count sits at the edge like the skills above.
-			int colW = shown == 1 ? w : (w - 16) / 2;
+			// Kills sit two to a line, unless a name would be cut short there: then each has the page's width,
+			// as does a single kill, so its count sits at the edge like the skills above.
+			boolean wide = shown == 1 || !KillRow.fits(g, kills.subList(0, shown), (w - 16) / 2);
+			int columns = wide ? 1 : 2;
+			int colW = wide ? w : (w - 16) / 2;
 			for (int i = 0; i < shown; i++)
 			{
-				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, x + (i % 2) * (colW + 16), y + (i / 2) * 20, colW);
+				KillRow.paint(g, kills.get(i), kills.get(i).count() / (double) top, skills == null ? null : skills.boss(kills.get(i).getName(), onLoaded),
+					x + (i % columns) * (colW + 16), y + (i / columns) * 20, colW);
 			}
-			y += ((shown + 1) / 2) * 20 + 6;
+			y += ((shown + columns - 1) / columns) * 20 + 6;
 		}
 
 		List<Moment> highlights = new ArrayList<>(s.getHighlights());
@@ -244,13 +282,20 @@ public final class ShareCard
 				g.setFont(Theme.body());
 				FontMetrics fm = g.getFontMetrics();
 				Ui.shadowed(g, Ui.clip(m.getTitle(), fm, right - tx), tx, y + fm.getAscent() - 2, Theme.mix(Theme.TEXT, color, 0.3));
+				int extra = 0;
 				if (m.getDetail() != null)
 				{
 					g.setFont(Theme.small());
 					g.setColor(Theme.TEXT_MUTED);
-					g.drawString(Ui.clip(m.getDetail(), small, right - tx), tx, y + fm.getAscent() + small.getAscent());
+					// A detail such as where a drop came from may take two lines rather than lose its value.
+					List<String> detail = Ui.lines(m.getDetail(), small, right - tx, 2);
+					for (int l = 0; l < detail.size(); l++)
+					{
+						g.drawString(detail.get(l), tx, y + fm.getAscent() + small.getAscent() + l * small.getHeight());
+					}
+					extra = Math.max(0, detail.size() - 1) * small.getHeight();
 				}
-				y += 32;
+				y += 32 + extra;
 			}
 		}
 
@@ -265,6 +310,39 @@ public final class ShareCard
 		g.drawString(deaths, x + w - small.stringWidth(deaths), y + small.getAscent());
 		y += small.getHeight();
 		return y + PAD;
+	}
+
+	/** A ribbon with the session's goal and how far it went; returns the y below it. */
+	private static int goal(Graphics2D g, Summary s, Goal goal, int x, int y, int w)
+	{
+		boolean done = goal.isReached();
+		int h = 34;
+		RoundRectangle2D box = new RoundRectangle2D.Float(x + 0.5f, y + 0.5f, w - 1, h - 1, Theme.RADIUS, Theme.RADIUS);
+		g.setPaint(new GradientPaint(x, y, Theme.CARD_TOP, x, y + h, Theme.CARD));
+		g.fill(box);
+		g.setColor(Theme.alpha(done ? Theme.TEAL : Theme.GOLD, 140));
+		g.draw(box);
+		g.setFont(Theme.small());
+		FontMetrics small = g.getFontMetrics();
+		String tag = done ? "GOAL REACHED" : "GOAL";
+		g.setColor(done ? Theme.TEAL : Theme.GOLD);
+		g.drawString(tag, x + 9, y + 6 + small.getAscent());
+		double share = GoalView.share(s, goal);
+		String pct = Math.round(share * 100) + "%";
+		g.setColor(Theme.progressColor(share));
+		g.drawString(pct, x + w - 9 - small.stringWidth(pct), y + 6 + small.getAscent());
+		g.setFont(Theme.body());
+		FontMetrics fm = g.getFontMetrics();
+		String what = goal.describe() + (done ? ", in " + Format.duration(goal.getReachedMs()) : "");
+		int tx = x + 9 + small.stringWidth(tag) + 8;
+		Ui.shadowed(g, Ui.clip(what, fm, x + w - 9 - small.stringWidth(pct) - 8 - tx), tx, y + 6 + small.getAscent(), Theme.TEXT);
+		int by = y + h - 10;
+		g.setColor(Theme.INK_DEEP);
+		g.fill(new RoundRectangle2D.Float(x + 9, by, w - 18, 4, 4, 4));
+		g.setPaint(new GradientPaint(x + 9, 0, done ? Theme.GREEN : Theme.progressColor(0), x + w - 9, 0,
+			done ? Theme.GREEN : Theme.progressColor(1)));
+		g.fill(new RoundRectangle2D.Float(x + 9, by, (float) Math.max(4, (w - 18) * share), 4, 4, 4));
+		return y + h;
 	}
 
 	/** "Ranged 99": the skill that rose the most, for the levels tile. */
@@ -282,13 +360,13 @@ public final class ShareCard
 		return best == null ? "" : best.getSkill() + " " + best.getLevel();
 	}
 
-	private static void header(Graphics2D g, String text, String trailing, int x, int y, int w)
+	static void header(Graphics2D g, String text, String trailing, int x, int y, int w)
 	{
 		g.setFont(Theme.small());
-		SectionHeader.paint(g, text.toUpperCase(), trailing, x, y, w, 20);
+		SectionHeader.paint(g, text.toUpperCase(Locale.ROOT), trailing, x, y, w, 20);
 	}
 
-	private static void rule(Graphics2D g, int x, int y, int w)
+	static void rule(Graphics2D g, int x, int y, int w)
 	{
 		g.setStroke(new BasicStroke(1f));
 		g.setPaint(new GradientPaint(x, 0, Theme.alpha(Theme.GOLD, 0), x + w / 2f, 0, Theme.alpha(Theme.GOLD, 150), true));
@@ -296,7 +374,7 @@ public final class ShareCard
 		diamond(g, x + w / 2f, y, 3, Theme.GOLD);
 	}
 
-	private static void diamond(Graphics2D g, float cx, float cy, float r, Color color)
+	static void diamond(Graphics2D g, float cx, float cy, float r, Color color)
 	{
 		Path2D d = new Path2D.Float();
 		d.moveTo(cx, cy - r);

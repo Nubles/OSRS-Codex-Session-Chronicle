@@ -24,6 +24,13 @@ public class Chronicle
 	private Session current;
 	private boolean live;
 	private long lastTick;
+	/** The task that just ended, so its last kill's loot, arriving a moment later, is still put to it. */
+	private String endedTask;
+	private long endedTaskAt;
+	/** Loot this soon after a task ended still counts toward it. */
+	static final long TASK_LOOT_MS = 10_000;
+	/** Finished tasks a session keeps. */
+	static final int MAX_TASKS_DONE = 20;
 
 	public Session current()
 	{
@@ -195,13 +202,34 @@ public class Chronicle
 	 */
 	public List<Moment> loot(String source, List<Session.Drop> drops, int kills, long valuable, long now)
 	{
+		return loot(source, drops, kills, false, valuable, now);
+	}
+
+	/**
+	 * Loot as {@link #loot(String, List, int, long, long)}, saying whether it came from something
+	 * opened or gathered (a bird nest, a crate, a raid chest) rather than from a monster's body. Such
+	 * lines are kept, but count as kills only when the game keeps a kill count for them (raids do).
+	 */
+	public List<Moment> loot(String source, List<Session.Drop> drops, int kills, boolean event, long valuable, long now)
+	{
 		if (current == null)
 		{
 			return Collections.emptyList();
 		}
 		if (kills > 0 && source != null && !source.isEmpty())
 		{
-			kill(source).looted += kills;
+			Session.KillLine line = kill(source);
+			line.looted += kills;
+			if (!event)
+			{
+				if (line.tasks == null)
+				{
+					line.tasks = new LinkedHashMap<>();
+				}
+				line.tasks.merge(taskOfTheMoment(now), kills, Integer::sum);
+			}
+			// One monster's loot is enough to call the line kills; an event only marks a line it began.
+			line.event = event && !Boolean.FALSE.equals(line.event);
 		}
 		List<Moment> moments = new ArrayList<>();
 		for (Session.Drop drop : drops)
@@ -245,6 +273,86 @@ public class Chronicle
 		return moments;
 	}
 
+	/** The slayer task kills are put to now: the one assigned, or the one that just ended; "" without one. */
+	private String taskOfTheMoment(long now)
+	{
+		if (current.slayer != null)
+		{
+			return current.slayer.name;
+		}
+		return endedTask != null && now - endedTaskAt <= TASK_LOOT_MS ? endedTask : "";
+	}
+
+	/** Whether the session is following a slayer task. */
+	public boolean hasSlayerTask()
+	{
+		return current != null && current.slayer != null;
+	}
+
+	/**
+	 * The player's slayer task as the game shows it. The count falling to nothing from its last few
+	 * kills finishes the task and makes a moment; falling from more is a task cancelled or reset.
+	 *
+	 * @param name the task's name, or null without a task
+	 * @param left kills left, 0 without a task
+	 * @param total kills it was given for, or 0 when not known
+	 * @param fresh the first reading after logging in: kills made elsewhere meanwhile are not this session's
+	 * @return the moment of a task finished, or null
+	 */
+	public Moment slayer(String name, int left, int total, boolean fresh, long now)
+	{
+		if (current == null)
+		{
+			return null;
+		}
+		SlayerTask task = current.slayer;
+		if (name == null || name.isEmpty() || left <= 0)
+		{
+			current.slayer = null;
+			if (task == null || fresh || task.left > SlayerTask.DONE_LEFT)
+			{
+				return null;
+			}
+			task.left = 0;
+			task.lastKillPlayMs = current.playedMs;
+			task.doneAt = now;
+			if (current.slayerDone == null)
+			{
+				current.slayerDone = new ArrayList<>();
+			}
+			current.slayerDone.add(task);
+			if (current.slayerDone.size() > MAX_TASKS_DONE)
+			{
+				current.slayerDone.remove(0);
+			}
+			endedTask = task.name;
+			endedTaskAt = now;
+			String detail = "Slayer task done" + (task.killedHere() > 0 && task.killedHere() < task.total
+				? ", " + task.killedHere() + " here" : "");
+			Moment m = new Moment(Moment.Kind.TASK, now, task.total + " " + task.name, detail, 0, 0);
+			add(m);
+			return m;
+		}
+		if (task == null || !task.name.equalsIgnoreCase(name) || left > task.left)
+		{
+			current.slayer = new SlayerTask(name, total, left, current.playedMs);
+			return null;
+		}
+		if (fresh)
+		{
+			// Killed on another client while away: the count moves, but not as this session's kills.
+			task.firstLeft -= task.left - left;
+			task.left = left;
+		}
+		else if (left < task.left)
+		{
+			task.left = left;
+			task.lastKillPlayMs = current.playedMs;
+		}
+		task.total = Math.max(task.total, Math.max(total, left));
+		return null;
+	}
+
 	/** The game's own kill count after a kill. */
 	public void killCount(String name, int count)
 	{
@@ -276,6 +384,125 @@ public class Chronicle
 			line.firstKc = count;
 		}
 		line.lastKc = range[1];
+	}
+
+	/** Trips kept on a live session; older ones only count toward the totals. */
+	static final int MAX_TRIPS = 50;
+	/** A bank closed and opened again sooner than this, with nothing done between, is no trip. */
+	static final long MIN_TRIP_MS = 20_000;
+
+	/**
+	 * The bank opened or closed. Closing it sets out on a trip; opening it again brings the trip home,
+	 * and a trip that brought kills, loot or experience is kept.
+	 *
+	 * @return the trip just finished, or null
+	 */
+	public Trip bank(boolean open)
+	{
+		if (current == null)
+		{
+			return null;
+		}
+		Session s = current;
+		if (!open)
+		{
+			if (s.out == null)
+			{
+				s.out = new Trip(s.playedMs, 0, s.totalKills(), s.lootValue(), s.totalXp());
+			}
+			return null;
+		}
+		Trip out = s.out;
+		s.out = null;
+		if (out == null)
+		{
+			return null;
+		}
+		Trip trip = new Trip(out.from, s.playedMs, s.totalKills() - out.kills, s.lootValue() - out.loot, s.totalXp() - out.xp);
+		boolean brought = trip.kills > 0 || trip.loot > 0 || trip.xp > 0;
+		if (!brought || trip.getMs() < MIN_TRIP_MS)
+		{
+			return null;
+		}
+		if (s.trips == null)
+		{
+			s.trips = new ArrayList<>();
+		}
+		s.trips.add(trip);
+		while (s.trips.size() > MAX_TRIPS)
+		{
+			s.trips.remove(0);
+		}
+		s.tripCount++;
+		s.tripMs += trip.getMs();
+		if (s.bestTripMs <= 0 || trip.getMs() < s.bestTripMs)
+		{
+			s.bestTripMs = trip.getMs();
+		}
+		return trip;
+	}
+
+	/** A session older than this when Ledger is first read takes its starting worth from Ledger's history. */
+	static final long FRESH_MS = 2 * 60_000L;
+
+	/**
+	 * Codex Ledger's worth, read again. A session just begun takes the worth as it stands for its start
+	 * (Ledger saves as the player logs out, so at login it is current); one already under way looks it up
+	 * in Ledger's history, or goes without rather than guess.
+	 *
+	 * @return true when what the session shows changed
+	 */
+	public boolean worth(LedgerWorth worth)
+	{
+		if (current == null || worth == null || !worth.isReady())
+		{
+			return false;
+		}
+		Long before = current.worthChange();
+		if (current.worthStart == null)
+		{
+			long start = current.playedMs <= FRESH_MS ? worth.getTotal() : worth.at(current.startedAt);
+			if (start > 0)
+			{
+				current.worthStart = start;
+			}
+		}
+		current.worthNow = worth.getTotal();
+		return !Objects.equals(before, current.worthChange());
+	}
+
+	/** Sets the live session's goal, or clears it with null. */
+	public void goal(Goal goal)
+	{
+		if (current != null)
+		{
+			current.goal = goal;
+		}
+	}
+
+	/**
+	 * Marks the goal reached once the session gets there.
+	 *
+	 * @return the moment that tells it, once, or null
+	 */
+	public Moment checkGoal(long now)
+	{
+		Goal goal = current == null ? null : current.getGoal();
+		if (goal == null || goal.isReached() || Goal.progress(current, goal.getKind()) < goal.getTarget())
+		{
+			return null;
+		}
+		goal.reachedMs = Math.max(1, current.playedMs);
+		Moment m = new Moment(Moment.Kind.GOAL, now, "Goal reached: " + goal.describe(),
+			"After " + minutes(current.playedMs) + " of play", 0, 0);
+		add(m);
+		return m;
+	}
+
+	private static String minutes(long ms)
+	{
+		long m = Math.max(1, ms / 60_000);
+		return m >= 60 ? m / 60 + "h " + m % 60 + "m" : m + "m";
 	}
 
 	public void moment(Moment moment)
@@ -406,13 +633,17 @@ public class Chronicle
 		return n < 1_000 ? String.valueOf(n) : coins(n);
 	}
 
+	/**
+	 * Coins by the rule the Codex plugins share: thousands whole, millions with one decimal and
+	 * billions with two, so a moment reads "5.0M of loot, beating 4.2M", never "5M" beside "4.2M".
+	 */
 	static String coins(long gp)
 	{
-		if (gp >= 1_000_000_000)
+		if (gp >= 999_950_000)
 		{
 			return String.format(Locale.ROOT, "%.2fB", gp / 1e9);
 		}
-		if (gp >= 1_000_000)
+		if (gp >= 999_500)
 		{
 			return String.format(Locale.ROOT, "%.1fM", gp / 1e6);
 		}
@@ -421,5 +652,28 @@ public class Chronicle
 			return Math.round(gp / 1e3) + "k";
 		}
 		return gp + " coins";
+	}
+
+	/** A goal's round figure by its name: "500k", "5M", "1.5M", "1B"; "950" below a thousand. */
+	static String mark(long n)
+	{
+		if (n < 1_000)
+		{
+			return String.valueOf(n);
+		}
+		if (n < 999_500)
+		{
+			return Math.round(n / 1e3) + "k";
+		}
+		String text = n < 999_950_000 ? String.format(Locale.ROOT, "%.1f", n / 1e6) : String.format(Locale.ROOT, "%.2f", n / 1e9);
+		while (text.endsWith("0"))
+		{
+			text = text.substring(0, text.length() - 1);
+		}
+		if (text.endsWith("."))
+		{
+			text = text.substring(0, text.length() - 1);
+		}
+		return text + (n < 999_950_000 ? "M" : "B");
 	}
 }
