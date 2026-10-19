@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle;
 
+import com.codex.sessionchronicle.core.Bosses;
 import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
 import com.codex.sessionchronicle.core.Goal;
@@ -211,7 +212,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 		return configManager.getConfig(CodexSessionChronicleConfig.class);
 	}
 
-	/** Each boss on the hiscores by its name in lower case, for its icon. */
+	/**
+	 * Each boss on the hiscores by {@link Bosses#key}, for its icon, so "Barrows" finds "Barrows
+	 * Chests" and "The Nightmare" finds "Nightmare". Where two share a key (a raid and its hard mode)
+	 * the plain one, listed first, keeps it.
+	 */
 	private static final Map<String, HiscoreSkill> BOSSES = new HashMap<>();
 
 	static
@@ -220,7 +225,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			if (s.getType() == HiscoreSkillType.BOSS && s.getSpriteId() >= 0)
 			{
-				BOSSES.put(s.getName().toLowerCase(Locale.ROOT), s);
+				BOSSES.putIfAbsent(Bosses.key(s.getName()), s);
 			}
 		}
 	}
@@ -237,7 +242,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			return null;
 		}
-		String key = name.toLowerCase(Locale.ROOT);
+		String key = Bosses.key(name);
 		HiscoreSkill boss = BOSSES.get(key);
 		if (boss == null)
 		{
@@ -361,6 +366,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			}
 		});
 		panel.setShowName(config.nameOnCard());
+		panel.setShowWorth(config.worthOnCard());
 		navButton = NavigationButton.builder()
 			.tooltip("Codex Session Chronicle")
 			.icon(Sigil.icon(16))
@@ -479,9 +485,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 			return;
 		}
 		// The plugin's own saves of the session and journal land here too, about once a minute;
-		// only the two settings that change what is drawn are worth acting on.
+		// only the settings that change what is drawn are worth acting on.
 		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
-			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey())))
+			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())))
 		{
 			return;
 		}
@@ -490,7 +496,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 		if (target != null)
 		{
 			boolean showName = config.nameOnCard();
-			SwingUtilities.invokeLater(() -> target.setShowName(showName));
+			boolean showWorth = config.worthOnCard();
+			SwingUtilities.invokeLater(() ->
+			{
+				target.setShowName(showName);
+				target.setShowWorth(showWorth);
+			});
 		}
 	}
 
