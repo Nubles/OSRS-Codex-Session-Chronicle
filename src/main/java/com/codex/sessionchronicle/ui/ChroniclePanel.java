@@ -51,6 +51,7 @@ public class ChroniclePanel extends PluginPanel
 	private Week week;
 	private String playerName;
 	private boolean showName = true;
+	private boolean showWorth;
 	private int open = -1;
 	private int tab;
 	private String cardNote;
@@ -220,6 +221,16 @@ public class ChroniclePanel extends PluginPanel
 		}
 	}
 
+	/** Whether the week's card and its text copy show how the net worth moved, by Codex Ledger. */
+	public void setShowWorth(boolean showWorth)
+	{
+		this.showWorth = showWorth;
+		if (tab == 2)
+		{
+			rebuildCard(true);
+		}
+	}
+
 	/** A line under the card's buttons, such as where it was saved. */
 	public void cardNote(String note)
 	{
@@ -374,7 +385,8 @@ public class ChroniclePanel extends PluginPanel
 	/** The Card tab with the week's card: the last seven days, to save or copy like a session's. */
 	private void rebuildWeekCard(boolean force)
 	{
-		Week w = week;
+		// Worth stays off a card to share unless the player asks for it.
+		Week w = week == null || showWorth ? week : week.withoutWorth();
 		String drawn = w == null || w.isEmpty() ? "week/none" : "week/" + showName + "/" + w.getLast() + "/" + w.getSessions()
 			+ "/" + w.getPlayedMs() / 60_000 + "/" + Format.xp(w.getXp()) + "/" + Format.coins(w.getLoot()) + "/" + w.getKills()
 			+ "/" + w.getLevels() + "/" + w.getHighlights().size() + "/" + w.getDeaths() + "/" + w.getActivities().size()
@@ -389,7 +401,7 @@ public class ChroniclePanel extends PluginPanel
 		if (w == null || w.isEmpty())
 		{
 			stack.add(SessionView.note("A quiet week", "Play a session and the week's card appears here: each day's play, what the week went on, "
-				+ "its best moments and, with Codex Ledger, how your net worth moved."));
+				+ "its best moments and, with Codex Ledger and Worth on cards, how your net worth moved."));
 			replace(card, stack);
 			return;
 		}

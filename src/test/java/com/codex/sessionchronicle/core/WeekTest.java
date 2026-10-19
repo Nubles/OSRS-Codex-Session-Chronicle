@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
@@ -106,6 +107,16 @@ public class WeekTest
 		assertEquals(at(13, 0), w.worthFrom());
 		assertEquals(Long.valueOf(125_000_000L - 112_000_000L), w.worthChange());
 		assertEquals(now, w.getWorth().get(w.getWorth().size() - 1)[0]);
+
+		// Shared without worth, the same week has none, and the week itself keeps it.
+		Week bare = w.withoutWorth();
+		assertEquals(null, bare.worthChange());
+		assertTrue(bare.getWorth().isEmpty());
+		assertEquals(w.getPlayedMs(), bare.getPlayedMs());
+		assertEquals(w.getSessions(), bare.getSessions());
+		assertEquals(Long.valueOf(125_000_000L - 112_000_000L), w.worthChange());
+		assertFalse(com.codex.sessionchronicle.ui.Recap.week(bare, true).contains("net worth"));
+		assertTrue(com.codex.sessionchronicle.ui.Recap.week(w, true).contains("net worth"));
 	}
 
 	@Test

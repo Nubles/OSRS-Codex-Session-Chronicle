@@ -15,7 +15,7 @@ import java.util.Map;
  * what the week was mostly spent on, its best moments, and how the net worth moved when Codex Ledger
  * keeps it. A session counts toward the day it began, as Today does. Pure, so it is tested offline.
  */
-public final class Week
+public final class Week implements Cloneable
 {
 	/** Days on the card: today and the six before it. */
 	public static final int DAYS = 7;
@@ -318,6 +318,28 @@ public final class Week
 	public List<long[]> getWorth()
 	{
 		return worth;
+	}
+
+	/**
+	 * The same week without Codex Ledger's worth, for a card shared without it: no worth line, no
+	 * change. The week itself is left as it is.
+	 */
+	public Week withoutWorth()
+	{
+		if (worth.isEmpty())
+		{
+			return this;
+		}
+		try
+		{
+			Week w = (Week) super.clone();
+			w.worth = Collections.emptyList();
+			return w;
+		}
+		catch (CloneNotSupportedException e)
+		{
+			throw new AssertionError(e);
+		}
 	}
 
 	/** How the worth moved over the points kept, or null with fewer than two. */

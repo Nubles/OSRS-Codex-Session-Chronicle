@@ -112,4 +112,16 @@ public interface CodexSessionChronicleConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "worthOnCard",
+		name = "Worth on cards",
+		description = "Show how your net worth moved, by Codex Ledger, on the week card and its text copy; off, they can be shared without it",
+		position = 5,
+		section = display
+	)
+	default boolean worthOnCard()
+	{
+		return false;
+	}
 }
