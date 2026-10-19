@@ -7,6 +7,7 @@ import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.LedgerWorth;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Session;
+import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.overlay.SessionTicker;
 import com.codex.sessionchronicle.ui.CardActions;
@@ -21,6 +22,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -169,13 +171,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private volatile String snapshot;
 	private volatile String snapshotProfile;
 	private String recentKc;
-	/** The slayer task's varps moved and are read on the next tick, once they all have; first after login. */
-	private boolean slayerDue;
-	private boolean slayerFresh;
-	/** Ticks the first read after logging in has waited for the slayer varps to arrive. */
-	private int slayerWaited;
-	/** Ticks a first read waits for a task to show before taking it as gone. */
-	private static final int SLAYER_WAIT_TICKS = 5;
+	/** When the slayer task's varps are read, and whether a reading is the first since a login or hop. */
+	private final SlayerWatch slayer = new SlayerWatch();
 	private long recentKcAt;
 
 	@Provides
@@ -216,6 +213,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 			public void copy(BufferedImage card)
 			{
 				copyCard(card);
+			}
+
+			@Override
+			public void copyText(String text)
+			{
+				copyRecap(text);
 			}
 		}, new SessionActions()
 		{
@@ -291,6 +294,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 	public void onGameStateChanged(GameStateChanged event)
 	{
 		GameState state = event.getGameState();
+		if (state == GameState.HOPPING || state == GameState.CONNECTION_LOST)
+		{
+			// The client takes its varps afresh in the new world: the task may read nothing for a few ticks.
+			slayer.arrived();
+		}
 		if (state == GameState.LOGGED_IN)
 		{
 			if (!chronicle.isLive() && !pendingBegin)
@@ -377,7 +385,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		guard();
 		chronicle.tick(now);
 		ticks++;
-		if (slayerDue)
+		slayer.tick();
+		if (slayer.isDue())
 		{
 			readSlayer(now);
 		}
@@ -471,9 +480,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			recap(journal.get(0));
 		}
 		quietBegin = false;
-		slayerDue = true;
-		slayerFresh = true;
-		slayerWaited = 0;
+		slayer.arrived();
 		readWorth();
 		saveCurrent();
 		dirty = true;
@@ -638,7 +645,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		if (varp == VarPlayerID.SLAYER_COUNT || varp == VarPlayerID.SLAYER_TARGET || varp == VarPlayerID.SLAYER_COUNT_ORIGINAL
 			|| event.getVarbitId() == VarbitID.SLAYER_TARGET_BOSSID)
 		{
-			slayerDue = true;
+			slayer.moved();
 		}
 	}
 
@@ -646,14 +653,13 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private void readSlayer(long now)
 	{
 		int left = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
-		if (slayerFresh && left <= 0 && chronicle.hasSlayerTask() && slayerWaited++ < SLAYER_WAIT_TICKS)
+		Boolean first = slayer.take(left, chronicle.hasSlayerTask());
+		if (first == null)
 		{
-			// Just logged in: the task's varps may not have arrived yet, so a carried-on session's task is not dropped at once.
+			// Just arrived in a world: the task's varps may not be back yet, so the task followed is not dropped at once.
 			return;
 		}
-		slayerDue = false;
-		boolean fresh = slayerFresh;
-		slayerFresh = false;
+		boolean fresh = first;
 		String name = left > 0 ? slayerTaskName() : null;
 		if (left > 0 && name == null)
 		{
@@ -981,7 +987,26 @@ public class CodexSessionChroniclePlugin extends Plugin
 		});
 	}
 
-	private void copyCard(BufferedImage card)
+	private void copyRecap(String text)
+	{
+		String note;
+		try
+		{
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+			note = "Copied as text. Paste it into a chat or a post.";
+		}
+		catch (IllegalStateException e)
+		{
+			note = "The clipboard is busy, try again in a moment.";
+		}
+		ChroniclePanel target = panel;
+		if (target != null)
+		{
+			target.cardNote(note);
+		}
+	}
+
+		private void copyCard(BufferedImage card)
 	{
 		String note;
 		try

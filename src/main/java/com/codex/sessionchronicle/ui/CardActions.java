@@ -9,4 +9,7 @@ public interface CardActions
 	void save(BufferedImage card, Summary session);
 
 	void copy(BufferedImage card);
+
+	/** Puts the session's recap on the clipboard as plain text. */
+	void copyText(String text);
 }

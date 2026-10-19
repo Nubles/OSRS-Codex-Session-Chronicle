@@ -294,7 +294,12 @@ public class ChroniclePanel extends PluginPanel
 			Format.day(s.getStartedAt())));
 		stack.add(new CardPreview(cardImage));
 		stack.add(buttons);
-		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste.";
+		JPanel text = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+		text.setOpaque(false);
+		text.add(new CodexButton("Copy as text", false, () -> actions.copyText(Recap.text(shownSession, showName))));
+		stack.add(text);
+		String note = cardNote != null ? cardNote : "Save card asks where to put the picture. Copy puts it on the clipboard, ready to paste; "
+			+ "as text it is a few lines for a chat or a post.";
 		stack.add(Ui.wrapped(note, Theme.small(), cardNote != null ? Theme.TEAL : Theme.TEXT_FAINT, SessionView.WIDTH - 10));
 		replace(card, stack);
 	}

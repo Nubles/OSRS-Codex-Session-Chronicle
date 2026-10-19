@@ -340,6 +340,13 @@ public final class Journal
 		private int streakDays;
 		private int longestStreak;
 		private List<Best> bests = new ArrayList<>();
+		private Today today = new Today();
+
+		/** Everything played today, across every session begun since midnight and the one being lived. */
+		public Today getToday()
+		{
+			return today;
+		}
 
 		public Session getMostXp()
 		{
@@ -385,6 +392,95 @@ public final class Journal
 		}
 	}
 
+	/** The day so far, summed over its sessions; a session counts toward the day it began. */
+	public static final class Today
+	{
+		private int sessions;
+		private long playedMs;
+		private long xp;
+		private long loot;
+		private int kills;
+		private int levels;
+		private int deaths;
+		private final Map<String, Long> bySkill = new LinkedHashMap<>();
+
+		void add(Session s)
+		{
+			sessions++;
+			playedMs += s.playedMs;
+			xp += s.totalXp();
+			loot += s.lootValue();
+			kills += s.totalKills();
+			levels += s.levelsGained();
+			deaths += s.getDeaths();
+			for (Session.SkillLine line : s.skills.values())
+			{
+				if (line.gained() > 0)
+				{
+					bySkill.merge(line.skill, line.gained(), Long::sum);
+				}
+			}
+		}
+
+		public int getSessions()
+		{
+			return sessions;
+		}
+
+		public long getPlayedMs()
+		{
+			return playedMs;
+		}
+
+		public long getXp()
+		{
+			return xp;
+		}
+
+		public long getLoot()
+		{
+			return loot;
+		}
+
+		public int getKills()
+		{
+			return kills;
+		}
+
+		public int getLevels()
+		{
+			return levels;
+		}
+
+		public int getDeaths()
+		{
+			return deaths;
+		}
+
+		/** The skill that gained the most today, or null without experience. */
+		public String getTopSkill()
+		{
+			String top = null;
+			long most = 0;
+			for (Map.Entry<String, Long> e : bySkill.entrySet())
+			{
+				if (e.getValue() > most)
+				{
+					most = e.getValue();
+					top = e.getKey();
+				}
+			}
+			return top;
+		}
+
+		/** Experience the top skill gained today. */
+		public long getTopSkillXp()
+		{
+			String top = getTopSkill();
+			return top == null ? 0 : bySkill.get(top);
+		}
+	}
+
 	/**
 	 * Records across the journal and the session being lived, if any.
 	 */
@@ -400,8 +496,13 @@ public final class Journal
 		Records r = new Records();
 		Set<LocalDate> days = new HashSet<>();
 		Map<String, Best> bests = new LinkedHashMap<>();
+		LocalDate today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate();
 		for (Session s : all)
 		{
+			if (Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalDate().equals(today))
+			{
+				r.today.add(s);
+			}
 			if (s.playedMs >= Pace.MIN_PLAYED_MS)
 			{
 				for (Pace.Line line : Pace.of(s, Collections.emptyList()))

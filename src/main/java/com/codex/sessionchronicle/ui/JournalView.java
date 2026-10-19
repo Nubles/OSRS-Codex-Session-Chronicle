@@ -34,6 +34,12 @@ final class JournalView
 	static JComponent build(List<Summary> sessions, Journal.Records records, Segmented metrics, IntConsumer open)
 	{
 		StackPanel stack = new StackPanel(8, 8);
+		Journal.Today today = records.getToday();
+		if (today.getSessions() > 0)
+		{
+			stack.add(new SectionHeader("Today", Format.duration(today.getPlayedMs()).replace("under a minute", "0m")));
+			stack.add(today(today));
+		}
 		JPanel tiles = new JPanel(new GridLayout(2, 2, 6, 6));
 		tiles.setOpaque(false);
 		tiles.add(new StatTile(Format.duration(records.getWeekPlayedMs()).replace("under a minute", "0m"), "This week",
@@ -88,6 +94,51 @@ final class JournalView
 			stack.add(row(sessions.get(i)).onClick(() -> open.accept(index)));
 		}
 		return stack;
+	}
+
+	/** The day so far: what every session begun today brought, and the skill most of it went to. */
+	private static Card today(Journal.Today t)
+	{
+		Card card = new Card(new BorderLayout(0, 2));
+		card.accent(Theme.GOLD);
+		JPanel values = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		values.setOpaque(false);
+		if (t.getXp() > 0)
+		{
+			values.add(value(Format.xp(t.getXp()) + " xp", Theme.XP));
+		}
+		if (t.getLoot() > 0)
+		{
+			values.add(value(Format.coins(t.getLoot()) + " gp", Theme.LOOT));
+		}
+		if (t.getKills() > 0)
+		{
+			values.add(value(t.getKills() + (t.getKills() == 1 ? " kill" : " kills"), Theme.KILLS));
+		}
+		if (values.getComponentCount() == 0)
+		{
+			values.add(value("Nothing gained yet", Theme.TEXT_FAINT));
+		}
+		card.add(values, BorderLayout.NORTH);
+		StringBuilder line = new StringBuilder();
+		line.append(t.getSessions()).append(t.getSessions() == 1 ? " session" : " sessions");
+		String top = t.getTopSkill();
+		if (top != null)
+		{
+			line.append(", most in ").append(top).append(" (").append(Format.xp(t.getTopSkillXp())).append(')');
+		}
+		if (t.getLevels() > 0)
+		{
+			line.append(", ").append(t.getLevels()).append(t.getLevels() == 1 ? " level" : " levels");
+		}
+		if (t.getDeaths() > 0)
+		{
+			line.append(", ").append(t.getDeaths()).append(t.getDeaths() == 1 ? " death" : " deaths");
+		}
+		line.append('.');
+		card.add(Ui.wrapped(line.toString(), Theme.small(), Theme.TEXT_MUTED, SessionView.WIDTH - 30), BorderLayout.CENTER);
+		card.setToolTipText("Every session begun today, the one under way included. A session that runs past midnight counts toward the day it began.");
+		return card;
 	}
 
 	/** One activity: its latest pace, every session's pace as a line, and the trend. */
