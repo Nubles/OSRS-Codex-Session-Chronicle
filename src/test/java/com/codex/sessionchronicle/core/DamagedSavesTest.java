@@ -190,6 +190,28 @@ public class DamagedSavesTest
 		j.get(0).getAsJsonObject().getAsJsonArray("moments").get(0).getAsJsonObject().addProperty("kind", "VOYAGE");
 		Journal.read(GSON, j.toString(), () -> lost[0] = true);
 		assertTrue(lost[0]);
+		// So are a later version's fields, which read without an error and would be gone at the next save.
+		lost[0] = false;
+		j = journal();
+		j.get(2).getAsJsonObject().add("sailing", PARSER.parse("{\"knots\":[1]}"));
+		assertEquals(4, Journal.read(GSON, j.toString(), () -> lost[0] = true).size());
+		assertTrue(lost[0]);
+		lost[0] = false;
+		j = journal();
+		j.get(2).getAsJsonObject().getAsJsonObject("kills").getAsJsonObject("vorkath").addProperty("perfect", 3);
+		Journal.read(GSON, j.toString(), () -> lost[0] = true);
+		assertTrue(lost[0]);
+		// The journal this version writes, as its own fixture holds it, reads as whole.
+		lost[0] = false;
+		try (java.io.InputStream in = DamagedSavesTest.class.getResourceAsStream("chronicle-journal.json"))
+		{
+			Journal.read(GSON, new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8), () -> lost[0] = true);
+		}
+		catch (java.io.IOException e)
+		{
+			throw new AssertionError(e);
+		}
+		assertFalse(lost[0]);
 		// One copy is kept: the first, then only a save at least as full, never a stub over it.
 		String full = journal().toString();
 		assertTrue(Saved.setAside(null, full));

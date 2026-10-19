@@ -57,6 +57,12 @@ public final class Journal
 		{
 			// The quick way, whenever it all reads whole.
 			List<Session> whole = gson.fromJson(json, JOURNAL);
+			// Read without an error, a later version's fields are passed over in silence and would be lost
+			// at the next save: compared with what was saved.
+			if (whole != null && !Saved.covers(Saved.tree(gson, json), Saved.toTree(gson, whole)))
+			{
+				lost.run();
+			}
 			if (whole != null)
 			{
 				for (Session s : whole)

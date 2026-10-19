@@ -122,6 +122,70 @@ public final class Saved
 		return null;
 	}
 
+	/** A value as Gson would save it, or null when it cannot be written. */
+	static JsonElement toTree(Gson gson, Object value)
+	{
+		try
+		{
+			return gson.toJsonTree(value);
+		}
+		catch (RuntimeException | StackOverflowError e)
+		{
+			return null;
+		}
+	}
+
+	/**
+	 * True when every field and list entry in {@code saved} is still there in {@code reread}, the value
+	 * read from it written out again: nothing was passed over. Only the shape is compared, not the
+	 * figures, which reading may bring back to sense; a field saved as null was nothing to lose.
+	 */
+	static boolean covers(JsonElement saved, JsonElement reread)
+	{
+		if (saved == null || saved.isJsonNull())
+		{
+			return true;
+		}
+		if (reread == null || reread.isJsonNull())
+		{
+			return false;
+		}
+		if (saved.isJsonObject())
+		{
+			if (!reread.isJsonObject())
+			{
+				return false;
+			}
+			JsonObject now = reread.getAsJsonObject();
+			for (Map.Entry<String, JsonElement> field : saved.getAsJsonObject().entrySet())
+			{
+				if (!covers(field.getValue(), now.get(field.getKey())))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		if (saved.isJsonArray())
+		{
+			if (!reread.isJsonArray() || reread.getAsJsonArray().size() < saved.getAsJsonArray().size())
+			{
+				return false;
+			}
+			JsonArray then = saved.getAsJsonArray();
+			JsonArray now = reread.getAsJsonArray();
+			for (int i = 0; i < then.size(); i++)
+			{
+				if (!covers(then.get(i), now.get(i)))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		return true;
+	}
+
 	/** The longest damaged save set aside; one past it is only logged, so the profile never doubles in size for it. */
 	static final int MAX_ASIDE = 1_000_000;
 
