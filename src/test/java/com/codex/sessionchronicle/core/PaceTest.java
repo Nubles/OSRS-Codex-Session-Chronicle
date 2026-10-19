@@ -44,6 +44,23 @@ public class PaceTest
 	}
 
 	@Test
+	public void cluesOpenedOnACombatTripAreNotItsMonster()
+	{
+		// Hill giants for beginner clues: twelve caskets opened outnumber the eight giants killed, but
+		// the trip is about the giants, and a casket an hour is no kill rate to race.
+		Session s = boss(10 * DAY, "Hill Giant", 8, 0, HOUR);
+		Session.KillLine clues = new Session.KillLine("Clue Scroll (Beginner)");
+		clues.looted = 12;
+		clues.event = true;
+		s.kills.put(Chronicle.key(clues.name), clues);
+		assertEquals("Hill Giant", Pace.mainKill(s).getName());
+		for (Pace.Line line : Pace.of(s, Collections.emptyList()))
+		{
+			assertFalse(line.getName(), "Clue Scroll (Beginner)".equals(line.getName()));
+		}
+	}
+
+	@Test
 	public void comparesTheMainSkillWithSessionsSpentOnIt()
 	{
 		List<Session> journal = Arrays.asList(

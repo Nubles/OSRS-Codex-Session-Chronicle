@@ -225,13 +225,13 @@ public final class Pace
 		return top;
 	}
 
-	/** The monster or raid with the most kills, or null. */
+	/** The monster or raid with the most kills, or null; nests, crates and caskets opened are no kills. */
 	static Session.KillLine topKill(Session s)
 	{
 		Session.KillLine top = null;
 		for (Session.KillLine line : s.kills.values())
 		{
-			if (line.count() > 0 && (top == null || line.count() > top.count()))
+			if (line.isKill() && line.count() > 0 && (top == null || line.count() > top.count()))
 			{
 				top = line;
 			}
