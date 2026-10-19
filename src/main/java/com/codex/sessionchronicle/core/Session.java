@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * One play session as it was lived: the experience each skill gained, the loot that dropped,
@@ -111,12 +112,16 @@ public class Session
 		return total;
 	}
 
+	/** Monsters killed and raids cleared: bird nests, crates and caskets opened are left out. */
 	public int totalKills()
 	{
 		int total = 0;
 		for (KillLine line : kills.values())
 		{
-			total += line.count();
+			if (line.isKill())
+			{
+				total += line.count();
+			}
 		}
 		return total;
 	}
@@ -222,6 +227,9 @@ public class Session
 	 */
 	public static class KillLine
 	{
+		private static final Pattern NOT_KILLS = Pattern.compile(
+			"(?i)\\b(?:bird nest|supply crate|reward pool|reward cart|casket|clue scroll|loot sack|seed pack|herbiboar|impling|spoils of war)");
+
 		String name;
 		int looted;
 		int firstKc;
@@ -232,6 +240,11 @@ public class Session
 		 * Null in sessions saved before it, which kept one counter in firstKc and lastKc.
 		 */
 		Map<String, int[]> counters;
+		/**
+		 * True when its loot came from something opened or gathered rather than killed (a bird nest,
+		 * a supply crate, a clue casket), false once a monster's loot fed it. Null in older saves.
+		 */
+		Boolean event;
 
 		KillLine()
 		{
@@ -262,6 +275,24 @@ public class Session
 				counted = lastKc - firstKc + 1;
 			}
 			return Math.max(looted, counted);
+		}
+
+		/**
+		 * Whether this line is real kills: a monster's loot, or a boss, raid or chest the game kept a kill
+		 * count for. Loot from a bird nest, a supply crate or a clue casket is not a kill.
+		 */
+		public boolean isKill()
+		{
+			if (firstKc > 0 || counters != null && !counters.isEmpty())
+			{
+				return true;
+			}
+			if (event != null)
+			{
+				return !event;
+			}
+			// Saved before the source was kept: judge by the name the Loot Tracker gives such loot.
+			return name == null || !NOT_KILLS.matcher(name).find();
 		}
 
 		/** The game's kill count after the latest kill, or 0 if the game never said. */

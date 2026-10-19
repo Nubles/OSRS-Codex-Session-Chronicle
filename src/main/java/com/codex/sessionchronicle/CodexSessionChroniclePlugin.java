@@ -539,7 +539,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 	public void onNpcLootReceived(NpcLootReceived event)
 	{
 		NPC npc = event.getNpc();
-		loot(npc == null ? null : npc.getName(), event.getItems(), 1);
+		loot(npc == null ? null : npc.getName(), event.getItems(), 1, false);
 	}
 
 	@Subscribe
@@ -551,10 +551,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			return;
 		}
-		loot(event.getName(), event.getItems(), type == LootRecordType.EVENT ? Math.max(1, event.getAmount()) : 0);
+		loot(event.getName(), event.getItems(), type == LootRecordType.EVENT ? Math.max(1, event.getAmount()) : 0, true);
 	}
 
-	private void loot(String source, Collection<ItemStack> items, int kills)
+	private void loot(String source, Collection<ItemStack> items, int kills, boolean opened)
 	{
 		if (!chronicle.isLive())
 		{
@@ -567,7 +567,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			ItemComposition item = itemManager.getItemComposition(id);
 			drops.add(new Session.Drop(id, item.getName(), stack.getQuantity(), itemManager.getItemPrice(id)));
 		}
-		List<Moment> moments = chronicle.loot(source == null ? null : Text.removeTags(source), drops, kills, config.valuableDrop(),
+		List<Moment> moments = chronicle.loot(source == null ? null : Text.removeTags(source), drops, kills, opened, config.valuableDrop(),
 			System.currentTimeMillis());
 		dirty = true;
 		saveSoon |= !moments.isEmpty();

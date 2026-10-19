@@ -136,4 +136,45 @@ public class GoalTest
 		assertNull("a goal with nothing to reach is dropped", gson.fromJson("{\"goal\":{\"kind\":\"XP\"}}", Session.class).getGoal());
 		assertFalse(Summary.of(back, Summary.State.ENDED, Collections.emptyList()).getGoal().isReached());
 	}
+
+	@Test
+	public void killsGoalCountsOnlyRealKills()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", 15 * MIN);
+		c.goal(new Goal(Goal.Kind.KILLS, 3, 0));
+		List<Session.Drop> none = Collections.emptyList();
+		// Woodcutting nests and a clue casket come through the Loot Tracker as events: loot, not kills.
+		c.loot("Bird nest", none, 5, true, 0, MIN);
+		c.loot("Clue Scroll (Medium)", none, 1, true, 0, MIN);
+		c.tick(MIN);
+		assertEquals(0, Goal.progress(c.current(), Goal.Kind.KILLS));
+		assertNull(c.checkGoal(MIN));
+
+		// Two monsters' loot, and a raid chest the game counted, are.
+		c.loot("Hill Giant", none, 1, false, 0, 2 * MIN);
+		c.loot("Hill Giant", none, 1, false, 0, 2 * MIN);
+		c.loot("Chambers of Xeric", none, 1, true, 0, 3 * MIN);
+		c.killCount("Chambers of Xeric", 41);
+		assertEquals(3, Goal.progress(c.current(), Goal.Kind.KILLS));
+		assertNotNull(c.checkGoal(3 * MIN));
+
+		Summary summary = Summary.of(c.current(), Summary.State.LIVE);
+		assertEquals(3, summary.getKills());
+		assertEquals(2, summary.getKillLines().size());
+		assertEquals("Bird nest", summary.getOpenedLines().get(0).getName());
+		assertEquals(2, summary.getOpenedLines().size());
+	}
+
+	@Test
+	public void olderSavesJudgeOpenedLootByName()
+	{
+		// Lines saved before the source was kept have no flag; the Loot Tracker's names tell them apart.
+		Session s = new Gson().fromJson("{\"startedAt\":1,\"kills\":{"
+			+ "\"bird nest\":{\"name\":\"Bird nest\",\"looted\":9},"
+			+ "\"supply crate\":{\"name\":\"Supply crate (Wintertodt)\",\"looted\":4},"
+			+ "\"wintertodt\":{\"name\":\"Wintertodt\",\"firstKc\":10,\"lastKc\":13},"
+			+ "\"abyssal demon\":{\"name\":\"Abyssal demon\",\"looted\":7}}}", Session.class);
+		assertEquals(4 + 7, s.totalKills());
+	}
 }

@@ -47,7 +47,10 @@ public final class Summary
 	private final int otherDrops;
 	private final List<Session.SkillLine> skills;
 	private final List<Session.Drop> drops;
+	/** Every kill line, opened loot included, for telling what the session was about. */
 	private final List<Session.KillLine> killLines;
+	private final List<Session.KillLine> realKills;
+	private final List<Session.KillLine> opened;
 	private final List<Moment> moments;
 	private final List<Moment> highlights;
 	private final Goal goal;
@@ -95,6 +98,14 @@ public final class Summary
 		}
 		killList.sort(Comparator.comparingInt(Session.KillLine::count).reversed());
 		killLines = Collections.unmodifiableList(killList);
+		List<Session.KillLine> real = new ArrayList<>();
+		List<Session.KillLine> open = new ArrayList<>();
+		for (Session.KillLine line : killList)
+		{
+			(line.isKill() ? real : open).add(line);
+		}
+		realKills = Collections.unmodifiableList(real);
+		opened = Collections.unmodifiableList(open);
 
 		List<Moment> momentList = new ArrayList<>(s.moments);
 		momentList.sort(Comparator.comparingLong(Moment::getAt));
@@ -218,7 +229,13 @@ public final class Summary
 	/** What was killed or cleared, most first. */
 	public List<Session.KillLine> getKillLines()
 	{
-		return killLines;
+		return realKills;
+	}
+
+	/** Bird nests, crates and caskets opened, most first: loot that came without a kill. */
+	public List<Session.KillLine> getOpenedLines()
+	{
+		return opened;
 	}
 
 	/** Moments in the order they happened. */

@@ -195,13 +195,26 @@ public class Chronicle
 	 */
 	public List<Moment> loot(String source, List<Session.Drop> drops, int kills, long valuable, long now)
 	{
+		return loot(source, drops, kills, false, valuable, now);
+	}
+
+	/**
+	 * Loot as {@link #loot(String, List, int, long, long)}, saying whether it came from something
+	 * opened or gathered (a bird nest, a crate, a raid chest) rather than from a monster's body. Such
+	 * lines are kept, but count as kills only when the game keeps a kill count for them (raids do).
+	 */
+	public List<Moment> loot(String source, List<Session.Drop> drops, int kills, boolean event, long valuable, long now)
+	{
 		if (current == null)
 		{
 			return Collections.emptyList();
 		}
 		if (kills > 0 && source != null && !source.isEmpty())
 		{
-			kill(source).looted += kills;
+			Session.KillLine line = kill(source);
+			line.looted += kills;
+			// One monster's loot is enough to call the line kills; an event only marks a line it began.
+			line.event = event && !Boolean.FALSE.equals(line.event);
 		}
 		List<Moment> moments = new ArrayList<>();
 		for (Session.Drop drop : drops)

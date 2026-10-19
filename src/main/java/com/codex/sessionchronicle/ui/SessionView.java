@@ -151,6 +151,23 @@ final class SessionView
 			}
 		}
 
+		List<Session.KillLine> opened = s.getOpenedLines();
+		if (!opened.isEmpty())
+		{
+			// Nests, crates and caskets are no kills; they are listed apart so the Kills figure stays honest.
+			int total = 0;
+			for (Session.KillLine line : opened)
+			{
+				total += line.count();
+			}
+			stack.add(new SectionHeader("Opened", String.valueOf(total)));
+			int top = opened.get(0).count();
+			for (int i = 0; i < opened.size() && i < KILLS; i++)
+			{
+				stack.add(new KillRow(opened.get(i), opened.get(i).count() / (double) top));
+			}
+		}
+
 		List<Moment> moments = s.getMoments();
 		if (!moments.isEmpty())
 		{
