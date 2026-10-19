@@ -19,6 +19,7 @@ import org.junit.Test;
  * "kills", an object of kill lines keyed by the folded name, each with "name", "looted", "firstKc",
  * "lastKc", "counters" ({counter: [first, last]}), "event" (true for loot from something opened) and "tasks"
  * ({slayer task name or "": kills looted under it}).
+ * Codex Navigator reads each filed session's "startedAt" and "playedMs" (play time in ms) from the journal.
  * Renaming or reshaping any of them breaks it without a compile error, so the shape is pinned here.
  */
 public class SavedShapeTest
@@ -34,6 +35,8 @@ public class SavedShapeTest
 		long t0 = 1_790_000_000_000L;
 		Chronicle c = new Chronicle();
 		c.begin(t0, "Zezima", 15 * 60_000L);
+		c.tick(t0 + 3_000);
+		c.tick(t0 + 6_000);
 		// The Grotesque Guardians drop their loot as Dusk, and the game counts them by their own name.
 		c.loot("Dusk", NONE, 1, false, 0, t0 + 60_000);
 		c.killCount("Grotesque Guardians", 41);
@@ -51,6 +54,8 @@ public class SavedShapeTest
 		JsonArray sessions = new JsonParser().parse(saved).getAsJsonArray();
 		JsonObject session = sessions.get(0).getAsJsonObject();
 		assertEquals(t0, session.get("startedAt").getAsLong());
+		// Play time, which Navigator reads beside startedAt.
+		assertEquals(6_000, session.get("playedMs").getAsLong());
 		JsonObject kills = session.getAsJsonObject("kills");
 
 		JsonObject guardians = kills.getAsJsonObject("grotesque guardians");
