@@ -84,7 +84,8 @@ public class TripsAndWorthTest
 		assertEquals(Chronicle.MAX_TRIPS, live.trips.size());
 		assertEquals(Chronicle.MAX_TRIPS + 10, live.tripCount);
 		Session filed = Journal.compact(live);
-		assertTrue(filed.trips.isEmpty());
+		// Every filed session is saved in the journal, so it carries no empty list for trips.
+		assertFalse(new Gson().toJson(filed).contains("\"trips\""));
 		Summary s = Summary.of(filed, Summary.State.ENDED);
 		assertEquals(Chronicle.MAX_TRIPS + 10, s.getTripCount());
 		assertEquals(MIN, s.averageTripMs(), 1_000);

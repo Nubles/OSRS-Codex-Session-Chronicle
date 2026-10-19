@@ -69,6 +69,7 @@ public final class Journal
 		c.worthStart = s.worthStart;
 		c.worthNow = s.worthNow;
 		// The journal keeps what the trips came to, not each trip.
+		c.trips = null;
 		c.tripCount = s.tripCount;
 		c.tripMs = s.tripMs;
 		c.bestTripMs = s.bestTripMs;

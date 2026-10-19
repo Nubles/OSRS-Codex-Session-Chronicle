@@ -329,6 +329,10 @@ public class Chronicle
 		{
 			return null;
 		}
+		if (s.trips == null)
+		{
+			s.trips = new ArrayList<>();
+		}
 		s.trips.add(trip);
 		while (s.trips.size() > MAX_TRIPS)
 		{
