@@ -17,7 +17,8 @@ import org.junit.Test;
  * Codex Gear Roadmap reads the saved journal (key "journal", a list of sessions) and the live session
  * (key "current", one), read only, to learn where the player fights: each session's "startedAt" and its
  * "kills", an object of kill lines keyed by the folded name, each with "name", "looted", "firstKc",
- * "lastKc", "counters" ({counter: [first, last]}) and "event" (true for loot from something opened).
+ * "lastKc", "counters" ({counter: [first, last]}), "event" (true for loot from something opened) and "tasks"
+ * ({slayer task name or "": kills looted under it}).
  * Renaming or reshaping any of them breaks it without a compile error, so the shape is pinned here.
  */
 public class SavedShapeTest
@@ -39,6 +40,7 @@ public class SavedShapeTest
 		c.loot("Dusk", NONE, 1, false, 0, t0 + 120_000);
 		c.killCount("Grotesque Guardians", 42);
 		c.loot("Bird nest", NONE, 3, true, 0, t0 + 180_000);
+		c.slayer("Abyssal demons", 50, 120, true, t0 + 200_000);
 		c.loot("Abyssal demon", NONE, 1, false, 0, t0 + 240_000);
 		Gson gson = new Gson();
 
@@ -65,5 +67,9 @@ public class SavedShapeTest
 		assertTrue("opened, not killed", nest.get("event").getAsBoolean());
 		assertEquals(3, nest.get("looted").getAsInt());
 		assertEquals(1, kills.getAsJsonObject("abyssal demon").get("looted").getAsInt());
+		// Kills by the slayer task of the moment ("" for none), so Gear Roadmap weighs each as it was fought.
+		assertEquals(1, kills.getAsJsonObject("abyssal demon").getAsJsonObject("tasks").get("Abyssal demons").getAsInt());
+		assertEquals(2, guardians.getAsJsonObject("tasks").get("").getAsInt());
+		assertFalse("opened loot has no task", nest.has("tasks"));
 	}
 }

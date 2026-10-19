@@ -74,7 +74,7 @@ final class JournalView
 		List<Journal.Best> bests = records.getBests();
 		if (!bests.isEmpty())
 		{
-			stack.add(new SectionHeader("Personal records", "fastest"));
+			stack.add(new SectionHeader("Your activities", "pace by session"));
 			for (int i = 0; i < bests.size() && i < RECORDS; i++)
 			{
 				stack.add(best(bests.get(i)));
@@ -90,25 +90,15 @@ final class JournalView
 		return stack;
 	}
 
-	/** One personal best: the skill or monster, how fast, and the day it was set. */
+	/** One activity: its latest pace, every session's pace as a line, and the trend. */
 	private static Card best(Journal.Best b)
 	{
-		Card card = new Card(new BorderLayout(6, 0));
-		card.setBorder(new EmptyBorder(5, 10, 5, 10));
+		Card card = new Card(new BorderLayout());
+		card.setBorder(new EmptyBorder(6, 10, 4, 10));
 		card.accent(PaceRow.color(b.getKind()));
-		JPanel text = new JPanel(new BorderLayout());
-		text.setOpaque(false);
-		JLabel name = Ui.label(b.getName(), Theme.body(), Theme.TEXT);
-		name.setMinimumSize(new Dimension(10, 10));
-		name.setPreferredSize(new Dimension(10, name.getPreferredSize().height));
-		text.add(name, BorderLayout.NORTH);
-		text.add(Ui.label(Format.day(b.getAt()), Theme.small(), Theme.TEXT_FAINT), BorderLayout.SOUTH);
-		card.add(text, BorderLayout.CENTER);
-		JPanel holder = new JPanel(new BorderLayout());
-		holder.setOpaque(false);
-		holder.add(Ui.label(PaceRow.rate(b.getRate(), b.getKind(), b.getName()), Theme.body(), PaceRow.color(b.getKind())), BorderLayout.NORTH);
-		card.add(holder, BorderLayout.EAST);
-		card.setToolTipText(b.getName() + ": " + PaceRow.rate(b.getRate(), b.getKind(), b.getName()) + ", the fastest in a session of 15 minutes or more");
+		ActivityRow row = new ActivityRow(b);
+		card.add(row, BorderLayout.CENTER);
+		card.setToolTipText(row.getToolTipText());
 		return card;
 	}
 

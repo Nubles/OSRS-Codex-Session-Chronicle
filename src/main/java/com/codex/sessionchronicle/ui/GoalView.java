@@ -195,7 +195,7 @@ final class GoalView
 	}
 
 	/** A slim bar that fills from ember to teal, green once the goal is reached. */
-	private static final class Bar extends JComponent
+	static final class Bar extends JComponent
 	{
 		private final double share;
 		private final boolean done;

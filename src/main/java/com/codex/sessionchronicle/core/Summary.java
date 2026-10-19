@@ -61,6 +61,8 @@ public final class Summary
 	private final List<Moment> highlights;
 	private final Goal goal;
 	private final long goalProgress;
+	private final SlayerTask slayer;
+	private final List<SlayerTask> slayerDone;
 	private List<Pace.Line> pace = Collections.emptyList();
 	private Map<Goal.Kind, List<Goal.Preset>> presets = Collections.emptyMap();
 
@@ -128,6 +130,20 @@ public final class Summary
 		outFor = s.out == null ? -1 : Math.max(0, s.playedMs - s.out.from);
 		goal = s.getGoal();
 		goalProgress = goal == null ? 0 : Goal.progress(s, goal.getKind());
+		slayer = s.slayer;
+		slayerDone = s.getSlayerDone();
+	}
+
+	/** The slayer task under way as last seen, or null. */
+	public SlayerTask getSlayer()
+	{
+		return slayer;
+	}
+
+	/** Slayer tasks finished in the session, oldest first. */
+	public List<SlayerTask> getSlayerDone()
+	{
+		return slayerDone;
 	}
 
 	public static Summary of(Session session, State state)

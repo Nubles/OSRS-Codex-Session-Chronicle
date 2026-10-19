@@ -211,6 +211,18 @@ public final class Pace
 		return s.playedMs <= 0 ? 0 : Math.round(amount * 3_600_000.0 / s.playedMs);
 	}
 
+	/** What the session was mainly spent on: its main monster, else its main skill; null when nothing was done. */
+	public static String activity(Session s)
+	{
+		Session.KillLine kill = mainKill(s);
+		if (kill != null)
+		{
+			return kill.getName();
+		}
+		Session.SkillLine skill = topSkill(s);
+		return skill == null ? null : skill.getSkill();
+	}
+
 	/** The skill that gained the most, or null. */
 	static Session.SkillLine topSkill(Session s)
 	{

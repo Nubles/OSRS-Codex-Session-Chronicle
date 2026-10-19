@@ -51,6 +51,9 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.gameval.DBTableID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
@@ -107,6 +110,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final int SAVE_TICKS = 100;
 	/** How long a kill count stays fresh enough to name the personal best that follows it. */
 	private static final long RECENT_KC_MS = 10_000;
+	/** The slayer task id that stands for "a boss", whose name is then looked up from the boss id. */
+	private static final int BOSS_TASK = 98;
+	/** The slayer task modifier that changes how many kills it is for. */
+	private static final int SLAYER_MODIFIER_AMOUNT = 2;
 
 	@Inject
 	private Client client;
@@ -162,6 +169,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private volatile String snapshot;
 	private volatile String snapshotProfile;
 	private String recentKc;
+	/** The slayer task's varps moved and are read on the next tick, once they all have; first after login. */
+	private boolean slayerDue;
+	private boolean slayerFresh;
 	private long recentKcAt;
 
 	@Provides
@@ -363,6 +373,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 		guard();
 		chronicle.tick(now);
 		ticks++;
+		if (slayerDue)
+		{
+			readSlayer(now);
+		}
 		Moment reached = chronicle.checkGoal(now);
 		if (reached != null)
 		{
@@ -453,6 +467,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 			recap(journal.get(0));
 		}
 		quietBegin = false;
+		slayerDue = true;
+		slayerFresh = true;
 		readWorth();
 		saveCurrent();
 		dirty = true;
@@ -611,6 +627,79 @@ public class CodexSessionChroniclePlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onVarbitChanged(VarbitChanged event)
+	{
+		int varp = event.getVarpId();
+		if (varp == VarPlayerID.SLAYER_COUNT || varp == VarPlayerID.SLAYER_TARGET || varp == VarPlayerID.SLAYER_COUNT_ORIGINAL
+			|| event.getVarbitId() == VarbitID.SLAYER_TARGET_BOSSID)
+		{
+			slayerDue = true;
+		}
+	}
+
+	/** Reads the slayer task as the game's slayer helper shows it, and tells the session. */
+	private void readSlayer(long now)
+	{
+		slayerDue = false;
+		boolean fresh = slayerFresh;
+		slayerFresh = false;
+		int left = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
+		String name = left > 0 ? slayerTaskName() : null;
+		if (left > 0 && name == null)
+		{
+			// The task's name could not be read: leave the session's task as it was rather than end it.
+			return;
+		}
+		int total = client.getVarpValue(VarPlayerID.SLAYER_COUNT_ORIGINAL);
+		if (client.getVarbitValue(VarbitID.SLAYER_MODIFIER_ID) == SLAYER_MODIFIER_AMOUNT)
+		{
+			int change = client.getVarbitValue(VarbitID.SLAYER_MODIFIER_VALUE);
+			total += client.getVarbitValue(VarbitID.SLAYER_MODIFIER_NEGATIVE) == 1 ? -change : change;
+		}
+		Moment done = chronicle.slayer(name, left, total, fresh, now);
+		dirty = true;
+		if (done != null)
+		{
+			saveSoon = true;
+		}
+	}
+
+	/** The current task's name from the game's slayer tables, as RuneLite's Slayer plugin reads it; null when unknown. */
+	private String slayerTaskName()
+	{
+		try
+		{
+			int taskId = client.getVarpValue(VarPlayerID.SLAYER_TARGET);
+			int row;
+			if (taskId == BOSS_TASK)
+			{
+				List<Integer> rows = client.getDBRowsByValue(DBTableID.SlayerTaskSublist.ID,
+					DBTableID.SlayerTaskSublist.COL_TASK_SUBTABLE_ID, 0, client.getVarbitValue(VarbitID.SLAYER_TARGET_BOSSID));
+				if (rows.isEmpty())
+				{
+					return null;
+				}
+				row = (Integer) client.getDBTableField(rows.get(0), DBTableID.SlayerTaskSublist.COL_TASK, 0)[0];
+			}
+			else
+			{
+				List<Integer> rows = client.getDBRowsByValue(DBTableID.SlayerTask.ID, DBTableID.SlayerTask.COL_ID, 0, taskId);
+				if (rows.isEmpty())
+				{
+					return null;
+				}
+				row = rows.get(0);
+			}
+			return (String) client.getDBTableField(row, DBTableID.SlayerTask.COL_NAME_UPPERCASE, 0)[0];
+		}
+		catch (RuntimeException e)
+		{
+			log.debug("Could not read the slayer task", e);
+			return null;
+		}
+	}
+
+	@Subscribe
 	public void onNpcLootReceived(NpcLootReceived event)
 	{
 		NPC npc = event.getNpc();
@@ -709,6 +798,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 				{
 					list.removeIf(s -> s == null);
 					journal = list;
+					// Sessions filed before the activity was kept get it now, for Codex Ledger to read.
+					if (Journal.label(list))
+					{
+						storeJournal();
+					}
 				}
 			}
 			String current = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, CURRENT_KEY);

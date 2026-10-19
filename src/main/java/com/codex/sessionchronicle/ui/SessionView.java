@@ -120,6 +120,8 @@ final class SessionView
 			}
 		}
 
+		SlayerView.add(stack, s);
+
 		trips(stack, s);
 
 		List<Session.SkillLine> skills = s.getSkills();

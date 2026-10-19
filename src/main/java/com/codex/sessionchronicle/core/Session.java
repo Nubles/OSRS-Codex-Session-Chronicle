@@ -38,6 +38,17 @@ public class Session
 	/** The quickest trip that brought something back, in play time, or 0. */
 	long bestTripMs;
 
+	/** The slayer task as last seen, or null without one. */
+	SlayerTask slayer;
+	/** Slayer tasks finished during the session, oldest first; null in older saves. */
+	List<SlayerTask> slayerDone;
+
+	/**
+	 * What the session was mainly spent on, as Pace judges it: its main monster ("Vorkath") or else its
+	 * main skill ("Mining"). Set when it is filed; Codex Ledger reads it to tell what pays.
+	 */
+	String activity;
+
 	/** Net worth by Codex Ledger as the session began, or null when it is not known. */
 	Long worthStart;
 	/** Net worth by Codex Ledger as last read during the session, or null. */
@@ -94,6 +105,24 @@ public class Session
 	public Goal getGoal()
 	{
 		return goal == null || !goal.isValid() ? null : goal;
+	}
+
+	/** What a filed session was mainly spent on, or null. */
+	public String getActivity()
+	{
+		return activity;
+	}
+
+	/** The slayer task under way as last seen, or null. */
+	public SlayerTask getSlayer()
+	{
+		return slayer;
+	}
+
+	/** Slayer tasks finished in the session, oldest first. */
+	public List<SlayerTask> getSlayerDone()
+	{
+		return slayerDone == null ? Collections.emptyList() : Collections.unmodifiableList(slayerDone);
 	}
 
 	/** How much the net worth moved over the session by Codex Ledger, or null when Ledger did not say. */
@@ -265,6 +294,13 @@ public class Session
 		 * a supply crate, a clue casket), false once a monster's loot fed it. Null in older saves.
 		 */
 		Boolean event;
+		/**
+		 * Kills looted while a slayer task was assigned, by the task's name as the game writes it
+		 * ("Abyssal demons"), and under "" those looted with no task. A kill of anything counts under
+		 * the task of the moment, whether the task covers it or not. Null in sessions saved before
+		 * it was kept; kills the game counted without loot are in neither.
+		 */
+		Map<String, Integer> tasks;
 
 		KillLine()
 		{
@@ -313,6 +349,12 @@ public class Session
 			}
 			// Saved before the source was kept: judge by the name the Loot Tracker gives such loot.
 			return name == null || !NOT_KILLS.matcher(name).find();
+		}
+
+		/** Kills looted under a slayer task by its name, or empty in older saves. */
+		public Map<String, Integer> getTasks()
+		{
+			return tasks == null ? Collections.emptyMap() : Collections.unmodifiableMap(tasks);
 		}
 
 		/** The game's kill count after the latest kill, or 0 if the game never said. */

@@ -24,6 +24,13 @@ public class Chronicle
 	private Session current;
 	private boolean live;
 	private long lastTick;
+	/** The task that just ended, so its last kill's loot, arriving a moment later, is still put to it. */
+	private String endedTask;
+	private long endedTaskAt;
+	/** Loot this soon after a task ended still counts toward it. */
+	static final long TASK_LOOT_MS = 10_000;
+	/** Finished tasks a session keeps. */
+	static final int MAX_TASKS_DONE = 20;
 
 	public Session current()
 	{
@@ -213,6 +220,14 @@ public class Chronicle
 		{
 			Session.KillLine line = kill(source);
 			line.looted += kills;
+			if (!event)
+			{
+				if (line.tasks == null)
+				{
+					line.tasks = new LinkedHashMap<>();
+				}
+				line.tasks.merge(taskOfTheMoment(now), kills, Integer::sum);
+			}
 			// One monster's loot is enough to call the line kills; an event only marks a line it began.
 			line.event = event && !Boolean.FALSE.equals(line.event);
 		}
@@ -256,6 +271,80 @@ public class Chronicle
 			}
 		}
 		return moments;
+	}
+
+	/** The slayer task kills are put to now: the one assigned, or the one that just ended; "" without one. */
+	private String taskOfTheMoment(long now)
+	{
+		if (current.slayer != null)
+		{
+			return current.slayer.name;
+		}
+		return endedTask != null && now - endedTaskAt <= TASK_LOOT_MS ? endedTask : "";
+	}
+
+	/**
+	 * The player's slayer task as the game shows it. The count falling to nothing from its last few
+	 * kills finishes the task and makes a moment; falling from more is a task cancelled or reset.
+	 *
+	 * @param name the task's name, or null without a task
+	 * @param left kills left, 0 without a task
+	 * @param total kills it was given for, or 0 when not known
+	 * @param fresh the first reading after logging in: kills made elsewhere meanwhile are not this session's
+	 * @return the moment of a task finished, or null
+	 */
+	public Moment slayer(String name, int left, int total, boolean fresh, long now)
+	{
+		if (current == null)
+		{
+			return null;
+		}
+		SlayerTask task = current.slayer;
+		if (name == null || name.isEmpty() || left <= 0)
+		{
+			current.slayer = null;
+			if (task == null || fresh || task.left > SlayerTask.DONE_LEFT)
+			{
+				return null;
+			}
+			task.left = 0;
+			task.lastKillPlayMs = current.playedMs;
+			task.doneAt = now;
+			if (current.slayerDone == null)
+			{
+				current.slayerDone = new ArrayList<>();
+			}
+			current.slayerDone.add(task);
+			if (current.slayerDone.size() > MAX_TASKS_DONE)
+			{
+				current.slayerDone.remove(0);
+			}
+			endedTask = task.name;
+			endedTaskAt = now;
+			String detail = "Slayer task done" + (task.killedHere() > 0 && task.killedHere() < task.total
+				? ", " + task.killedHere() + " here" : "");
+			Moment m = new Moment(Moment.Kind.TASK, now, task.total + " " + task.name, detail, 0, 0);
+			add(m);
+			return m;
+		}
+		if (task == null || !task.name.equalsIgnoreCase(name) || left > task.left)
+		{
+			current.slayer = new SlayerTask(name, total, left, current.playedMs);
+			return null;
+		}
+		if (fresh)
+		{
+			// Killed on another client while away: the count moves, but not as this session's kills.
+			task.firstLeft -= task.left - left;
+			task.left = left;
+		}
+		else if (left < task.left)
+		{
+			task.left = left;
+			task.lastKillPlayMs = current.playedMs;
+		}
+		task.total = Math.max(task.total, Math.max(total, left));
+		return null;
 	}
 
 	/** The game's own kill count after a kill. */
