@@ -118,7 +118,7 @@ public final class Pace
 		}
 		List<Line> lines = new ArrayList<>();
 		Session.SkillLine skill = topSkill(s);
-		Session.KillLine kill = topKill(s);
+		Session.KillLine kill = mainKill(s);
 		// A slayer trip's main skill is a combat one; its monster says more about the session.
 		if (skill != null && (kill == null || !isCombat(skill.getSkill())))
 		{
@@ -173,7 +173,7 @@ public final class Pace
 	static boolean sameActivity(Kind kind, String name, Session past)
 	{
 		Session.SkillLine skill = topSkill(past);
-		Session.KillLine kill = topKill(past);
+		Session.KillLine kill = mainKill(past);
 		switch (kind)
 		{
 			case SKILL:
@@ -231,6 +231,22 @@ public final class Pace
 			}
 		}
 		return top;
+	}
+
+	/**
+	 * The monster or raid the session was about, or null. Bird nests and reward crates are loot
+	 * of a skilling session rather than its point, so a skilling session only has one when the
+	 * game itself counted it (a kill count message).
+	 */
+	static Session.KillLine mainKill(Session s)
+	{
+		Session.KillLine kill = topKill(s);
+		Session.SkillLine skill = topSkill(s);
+		if (kill == null || skill == null || isCombat(skill.getSkill()) || kill.getKillCount() > 0)
+		{
+			return kill;
+		}
+		return null;
 	}
 
 	static boolean isCombat(String skill)

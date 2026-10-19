@@ -106,9 +106,9 @@ final class JournalView
 		card.add(text, BorderLayout.CENTER);
 		JPanel holder = new JPanel(new BorderLayout());
 		holder.setOpaque(false);
-		holder.add(Ui.label(PaceRow.rate(b.getRate(), b.getKind()), Theme.body(), PaceRow.color(b.getKind())), BorderLayout.NORTH);
+		holder.add(Ui.label(PaceRow.rate(b.getRate(), b.getKind(), b.getName()), Theme.body(), PaceRow.color(b.getKind())), BorderLayout.NORTH);
 		card.add(holder, BorderLayout.EAST);
-		card.setToolTipText(b.getName() + ": " + PaceRow.rate(b.getRate(), b.getKind()) + ", the fastest in a session of 15 minutes or more");
+		card.setToolTipText(b.getName() + ": " + PaceRow.rate(b.getRate(), b.getKind(), b.getName()) + ", the fastest in a session of 15 minutes or more");
 		return card;
 	}
 

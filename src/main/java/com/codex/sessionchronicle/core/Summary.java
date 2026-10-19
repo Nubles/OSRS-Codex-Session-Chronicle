@@ -378,6 +378,24 @@ public final class Summary
 	}
 
 	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */
+	/** What one of a kill line counts, in the plural: "kills", "clears" for raids and runs, "clues" for caskets. */
+	public static String noun(String name)
+	{
+		if (CLUE.matcher(name).matches())
+		{
+			return "clues";
+		}
+		String key = Chronicle.key(name);
+		for (String raid : CLEARS)
+		{
+			if (key.startsWith(raid))
+			{
+				return "clears";
+			}
+		}
+		return "kills";
+	}
+
 	static String kills(Session.KillLine line)
 	{
 		int n = line.count();

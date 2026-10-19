@@ -138,7 +138,7 @@ public final class Journal
 			{
 				continue;
 			}
-			String unit = line.getKind() == Pace.Kind.SKILL ? " xp/hr" : " kills/hr";
+			String unit = line.getKind() == Pace.Kind.SKILL ? " xp/hr" : " " + Summary.noun(line.getName()) + "/hr";
 			marked.add(new Moment(Moment.Kind.RECORD, at, line.getName() + " record: " + Chronicle.amount(line.getRate()) + unit,
 				"Your best was " + Chronicle.amount(line.getBest()) + unit, 0, 0));
 		}

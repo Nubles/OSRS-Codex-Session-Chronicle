@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.ui;
 
 import com.codex.sessionchronicle.core.Pace;
+import com.codex.sessionchronicle.core.Summary;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
@@ -48,7 +49,7 @@ class PaceRow extends JComponent
 		g.setFont(Theme.body());
 		FontMetrics fm = g.getFontMetrics();
 		int base = y + fm.getAscent();
-		String rate = rate(line.getRate(), line.getKind());
+		String rate = rate(line.getRate(), line.getKind(), line.getName());
 		int rw = fm.stringWidth(rate);
 		Ui.shadowed(g, rate, x + w - rw, base, tint);
 		Ui.shadowed(g, Ui.clip(title(line), fm, w - rw - 8), x, base, Theme.TEXT);
@@ -88,15 +89,15 @@ class PaceRow extends JComponent
 		return line.getKind() == Pace.Kind.LOOT ? "Loot" : line.getName();
 	}
 
-	/** "212k xp/hr", "31 kills/hr", "1.2M gp/hr". */
-	static String rate(long rate, Pace.Kind kind)
+	/** "212k xp/hr", "31 kills/hr", "3 clears/hr", "1.2M gp/hr". */
+	static String rate(long rate, Pace.Kind kind, String name)
 	{
 		switch (kind)
 		{
 			case SKILL:
 				return Format.amount(rate) + " xp/hr";
 			case KILLS:
-				return Format.amount(rate) + (rate == 1 ? " kill/hr" : " kills/hr");
+				return Format.amount(rate) + " " + Summary.noun(name) + "/hr";
 			default:
 				return Format.amount(rate) + " gp/hr";
 		}
@@ -148,8 +149,8 @@ class PaceRow extends JComponent
 		{
 			return "No earlier " + what + " of 15 minutes or more to compare with yet";
 		}
-		return "<html>" + rate(line.getRate(), line.getKind()) + " now<br>Usual " + rate(line.getUsual(), line.getKind())
-			+ ", best " + rate(line.getBest(), line.getKind()) + " (" + Format.day(line.getBestAt()) + ")<br>From "
+		return "<html>" + rate(line.getRate(), line.getKind(), line.getName()) + " now<br>Usual "
+			+ rate(line.getUsual(), line.getKind(), line.getName()) + ", best " + rate(line.getBest(), line.getKind(), line.getName()) + " (" + Format.day(line.getBestAt()) + ")<br>From "
 			+ line.getSamples() + " " + Ui.escape(what) + "</html>";
 	}
 

@@ -174,4 +174,26 @@ public class PaceTest
 		assertEquals(0, r.getLongestStreak());
 		assertNull(r.getMostXp());
 	}
+
+	@Test
+	public void birdNestsAreNotWhatAWoodcuttingSessionWasAbout()
+	{
+		Session s = skill(DAY, "Woodcutting", 90_000, HOUR);
+		Session.KillLine nests = new Session.KillLine("Bird nest");
+		nests.looted = 6;
+		s.kills.put(Chronicle.key("Bird nest"), nests);
+		List<Pace.Line> lines = Pace.of(s, Collections.emptyList());
+		assertEquals(1, lines.size());
+		assertEquals(Pace.Kind.SKILL, lines.get(0).getKind());
+		assertEquals("Woodcutting", lines.get(0).getName());
+	}
+
+	@Test
+	public void raidRecordsCountClears()
+	{
+		List<Session> journal = Collections.singletonList(boss(DAY, "Chambers of Xeric", 2, 0, HOUR));
+		List<Moment> marked = Journal.markRecords(boss(2 * DAY, "Chambers of Xeric", 3, 0, HOUR), journal);
+		assertEquals("Chambers of Xeric record: 3 clears/hr", marked.get(0).getTitle());
+		assertEquals("Your best was 2 clears/hr", marked.get(0).getDetail());
+	}
 }
