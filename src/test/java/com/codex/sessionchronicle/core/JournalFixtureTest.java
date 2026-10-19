@@ -15,8 +15,9 @@ import org.junit.Test;
 /**
  * {@code chronicle-journal.json} is the journal this plugin's own code writes for two sessions: a
  * Vorkath trip, partly on a Blue dragons task, with Codex Ledger's net worth at either end, then an
- * hour of Mining. Codex Gear Roadmap (where the player fights, and on which task) and Codex Ledger
- * (what pays) keep byte-for-byte copies of it and read them with their own readers, so a change to
+ * hour of Mining. Codex Gear Roadmap (where the player fights, and on which task), Codex Ledger
+ * (what pays) and Codex Navigator (play time for goal dates) keep byte-for-byte copies of it and read
+ * them with their own readers, so a change to
  * what is written here fails this test first, and the copies must be refreshed with it.
  */
 public class JournalFixtureTest
