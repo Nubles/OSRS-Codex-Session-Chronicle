@@ -172,6 +172,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	/** The slayer task's varps moved and are read on the next tick, once they all have; first after login. */
 	private boolean slayerDue;
 	private boolean slayerFresh;
+	/** Ticks the first read after logging in has waited for the slayer varps to arrive. */
+	private int slayerWaited;
+	/** Ticks a first read waits for a task to show before taking it as gone. */
+	private static final int SLAYER_WAIT_TICKS = 5;
 	private long recentKcAt;
 
 	@Provides
@@ -469,6 +473,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		quietBegin = false;
 		slayerDue = true;
 		slayerFresh = true;
+		slayerWaited = 0;
 		readWorth();
 		saveCurrent();
 		dirty = true;
@@ -640,10 +645,15 @@ public class CodexSessionChroniclePlugin extends Plugin
 	/** Reads the slayer task as the game's slayer helper shows it, and tells the session. */
 	private void readSlayer(long now)
 	{
+		int left = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
+		if (slayerFresh && left <= 0 && chronicle.hasSlayerTask() && slayerWaited++ < SLAYER_WAIT_TICKS)
+		{
+			// Just logged in: the task's varps may not have arrived yet, so a carried-on session's task is not dropped at once.
+			return;
+		}
 		slayerDue = false;
 		boolean fresh = slayerFresh;
 		slayerFresh = false;
-		int left = client.getVarpValue(VarPlayerID.SLAYER_COUNT);
 		String name = left > 0 ? slayerTaskName() : null;
 		if (left > 0 && name == null)
 		{

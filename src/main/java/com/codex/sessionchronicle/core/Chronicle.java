@@ -283,6 +283,12 @@ public class Chronicle
 		return endedTask != null && now - endedTaskAt <= TASK_LOOT_MS ? endedTask : "";
 	}
 
+	/** Whether the session is following a slayer task. */
+	public boolean hasSlayerTask()
+	{
+		return current != null && current.slayer != null;
+	}
+
 	/**
 	 * The player's slayer task as the game shows it. The count falling to nothing from its last few
 	 * kills finishes the task and makes a moment; falling from more is a task cancelled or reset.
