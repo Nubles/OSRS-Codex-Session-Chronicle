@@ -89,7 +89,35 @@ public class WeekTest
 		assertEquals(2, w.getHighlights().size());
 		assertEquals("Rock golem!", w.getHighlights().get(0).getTitle());
 		assertEquals("Mining record: 206k xp/hr", w.getHighlights().get(1).getTitle());
-		assertEquals(2, w.getRecords());
+		// One record, beaten again: counted once, as it is told once.
+		assertEquals(1, w.getRecords());
+		assertEquals("1 record", w.highlightsNote());
+	}
+
+	@Test
+	public void theHighlightsHeaderNeverCountsMoreThanItLists()
+	{
+		// Four records over four skills, but room for three lines: the header once read "4 records".
+		List<Session> journal = new ArrayList<>();
+		String[] skills = {"Mining", "Fishing", "Woodcutting", "Agility"};
+		for (int i = 0; i < skills.length; i++)
+		{
+			Session s = session(at(14 + i, 10), 60, skills[i], 1_000);
+			s.moments.add(new Moment(Moment.Kind.RECORD, at(14 + i, 11), skills[i] + " record: " + (100 + i) + "k xp/hr", "", 0, 0));
+			journal.add(s);
+		}
+		Week w = Week.of(journal, null, at(19, 10), ZONE, null);
+		assertEquals(3, w.getHighlights().size());
+		assertEquals(4, w.getRecords());
+		assertEquals("3 of 4 records", w.highlightsNote());
+		// A pet takes a line: two of the four records are listed beside it.
+		journal.get(0).moments.add(new Moment(Moment.Kind.PET, at(14, 12), "Rock golem!", "", 0, 0));
+		w = Week.of(journal, null, at(19, 10), ZONE, null);
+		assertEquals("2 of 4 records", w.highlightsNote());
+		// No records, no count.
+		Session plain = session(at(15, 10), 60, "Mining", 1_000);
+		plain.moments.add(new Moment(Moment.Kind.PET, at(15, 11), "Heron!", "", 0, 0));
+		assertNull(Week.of(Collections.singletonList(plain), null, at(19, 10), ZONE, null).highlightsNote());
 	}
 
 	@Test

@@ -215,7 +215,7 @@ public final class WeekCard
 		List<Moment> highlights = w.getHighlights();
 		if (!highlights.isEmpty())
 		{
-			ShareCard.header(g, "Highlights", w.getRecords() > 0 ? w.getRecords() + (w.getRecords() == 1 ? " record" : " records") : null, x, y, cw);
+			ShareCard.header(g, "Highlights", w.highlightsNote(), x, y, cw);
 			y += 24;
 			for (Moment m : highlights)
 			{

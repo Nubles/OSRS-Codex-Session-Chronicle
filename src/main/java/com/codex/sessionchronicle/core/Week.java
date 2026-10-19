@@ -206,10 +206,6 @@ public final class Week implements Cloneable
 				{
 					continue;
 				}
-				if (m.getKind() == Moment.Kind.RECORD)
-				{
-					w.records++;
-				}
 				// Deaths and plain levels make a week's story only when nothing better happened.
 				if (m.getKind() != Moment.Kind.DEATH)
 				{
@@ -240,6 +236,17 @@ public final class Week implements Cloneable
 			}
 			w.highlights.add(m);
 		}
+		// Records are counted as they are told: one beaten again later in the week is one record.
+		java.util.Set<String> records = new java.util.HashSet<>();
+		for (Moment m : moments)
+		{
+			if (m.getKind() == Moment.Kind.RECORD)
+			{
+				String title = m.getTitle();
+				records.add(title.contains(":") ? title.substring(0, title.indexOf(':')) : title);
+			}
+		}
+		w.records = records.size();
 		// The week before is only set against this one when the journal reaches back past all of it (a
 		// session older than it is kept): a journal begun midweek, or trimmed of its oldest sessions,
 		// would make it look idle.
@@ -389,7 +396,31 @@ public final class Week implements Cloneable
 		return deaths;
 	}
 
-	/** Personal records set during the week. */
+	/**
+	 * What the Highlights header says beside its lines: the records, never more than are listed ("1
+	 * record", or "3 of 4 records" when only three fit), or null when none is listed.
+	 */
+	public String highlightsNote()
+	{
+		if (records == 0)
+		{
+			return null;
+		}
+		int shown = 0;
+		for (Moment m : highlights)
+		{
+			shown += m.getKind() == Moment.Kind.RECORD ? 1 : 0;
+		}
+		if (shown == 0)
+		{
+			// Better moments filled the lines: a count of records none of them are would only puzzle.
+			return null;
+		}
+		String noun = records == 1 ? " record" : " records";
+		return shown >= records ? records + noun : shown + " of " + records + noun;
+	}
+
+	/** Personal records set during the week, each counted once however often it was beaten. */
 	public int getRecords()
 	{
 		return records;
