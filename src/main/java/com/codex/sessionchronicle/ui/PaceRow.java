@@ -114,12 +114,14 @@ class PaceRow extends JComponent
 		{
 			return (line.getKind() == Pace.Kind.LOOT ? "Richer than " : "Faster than ") + whose + " best";
 		}
+		// One earlier session is no habit yet: it is compared as the last time, not as the usual.
+		String usual = whose + (line.getSamples() == 1 ? " last" : " usual");
 		double vs = line.vsUsual();
 		if (Math.abs(vs) < 0.03)
 		{
-			return "About " + whose + " usual";
+			return "About " + usual;
 		}
-		return Math.round(Math.abs(vs) * 100) + "% " + (vs > 0 ? "above " : "below ") + whose + " usual";
+		return Math.round(Math.abs(vs) * 100) + "% " + (vs > 0 ? "above " : "below ") + usual;
 	}
 
 	static Color verdictColor(Pace.Line line)
@@ -149,7 +151,7 @@ class PaceRow extends JComponent
 		{
 			return "No earlier " + what + " of 15 minutes or more to compare with yet";
 		}
-		return "<html>" + rate(line.getRate(), line.getKind(), line.getName()) + " now<br>Usual "
+		return "<html>" + rate(line.getRate(), line.getKind(), line.getName()) + " now<br>" + (line.getSamples() == 1 ? "Last " : "Usual ")
 			+ rate(line.getUsual(), line.getKind(), line.getName()) + ", best " + rate(line.getBest(), line.getKind(), line.getName()) + " (" + Format.day(line.getBestAt()) + ")<br>From "
 			+ line.getSamples() + " " + Ui.escape(what) + "</html>";
 	}

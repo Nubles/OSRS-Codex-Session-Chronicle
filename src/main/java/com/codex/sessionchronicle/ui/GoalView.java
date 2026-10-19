@@ -77,7 +77,15 @@ final class GoalView
 			column.add(button, BorderLayout.CENTER);
 			row.add(column);
 		}
-		body.add(row, BorderLayout.CENTER);
+		if (presets == null || presets.isEmpty())
+		{
+			// A six-hour session is past every time on offer; say so rather than show an empty row.
+			body.add(Ui.label("Already past every goal on offer", Theme.small(), Theme.TEXT_FAINT), BorderLayout.CENTER);
+		}
+		else
+		{
+			body.add(row, BorderLayout.CENTER);
+		}
 		card.add(body, BorderLayout.CENTER);
 		return card;
 	}

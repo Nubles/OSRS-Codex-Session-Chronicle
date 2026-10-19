@@ -377,7 +377,6 @@ public final class Summary
 		return "A quiet session";
 	}
 
-	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */
 	/** What one of a kill line counts, in the plural: "kills", "clears" for raids and runs, "clues" for caskets. */
 	public static String noun(String name)
 	{
@@ -396,6 +395,7 @@ public final class Summary
 		return "kills";
 	}
 
+	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */
 	static String kills(Session.KillLine line)
 	{
 		int n = line.count();

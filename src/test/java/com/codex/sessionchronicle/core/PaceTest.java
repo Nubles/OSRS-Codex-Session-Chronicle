@@ -196,4 +196,18 @@ public class PaceTest
 		assertEquals("Chambers of Xeric record: 3 clears/hr", marked.get(0).getTitle());
 		assertEquals("Your best was 2 clears/hr", marked.get(0).getDetail());
 	}
+
+	@Test
+	public void aSessionTooShortToFileARecordIsNeverShownAsOne()
+	{
+		List<Session> journal = Arrays.asList(skill(DAY, "Mining", 150_000, HOUR), skill(2 * DAY, "Mining", 180_000, HOUR));
+		// Six lucky minutes: faster than the best so far, but too short to stand as a record.
+		Session lucky = skill(3 * DAY, "Mining", 260_000, 6 * MIN);
+		Pace.Line line = Pace.of(lucky, journal).get(0);
+		assertEquals(260_000, line.getRate());
+		assertFalse("the panel and card must not call it a record", line.isRecord());
+		assertTrue(Journal.markRecords(lucky, journal).isEmpty());
+		// Played on to fifteen minutes at that pace, it is one.
+		assertTrue(Pace.of(skill(3 * DAY, "Mining", 260_000, 15 * MIN), journal).get(0).isRecord());
+	}
 }

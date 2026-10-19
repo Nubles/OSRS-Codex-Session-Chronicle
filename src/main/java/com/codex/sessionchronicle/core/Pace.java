@@ -35,9 +35,12 @@ public final class Pace
 		private final long best;
 		private final long bestAt;
 		private final int samples;
+		/** Whether the session itself is long enough for its rate to stand as a record. */
+		private final boolean settled;
 
-		Line(Kind kind, String name, long rate, long usual, long best, long bestAt, int samples)
+		Line(Kind kind, String name, long rate, long usual, long best, long bestAt, int samples, boolean settled)
 		{
+			this.settled = settled;
 			this.kind = kind;
 			this.name = name;
 			this.rate = rate;
@@ -94,10 +97,13 @@ public final class Pace
 			return usual <= 0 ? 0 : rate / (double) usual - 1;
 		}
 
-		/** Faster than every earlier session of the same kind. */
+		/**
+		 * Faster than every earlier session of the same kind, in a session long enough to count:
+		 * a few lucky minutes are never called a record, just as they are never filed as one.
+		 */
 		public boolean isRecord()
 		{
-			return samples > 0 && rate > best;
+			return settled && samples > 0 && rate > best;
 		}
 	}
 
@@ -166,7 +172,7 @@ public final class Pace
 		Collections.sort(rates);
 		long usual = rates.isEmpty() ? 0 : rates.size() % 2 == 1 ? rates.get(rates.size() / 2)
 			: (rates.get(rates.size() / 2 - 1) + rates.get(rates.size() / 2)) / 2;
-		return new Line(kind, name, rate(kind, name, s), usual, best, bestAt, rates.size());
+		return new Line(kind, name, rate(kind, name, s), usual, best, bestAt, rates.size(), s.playedMs >= MIN_PLAYED_MS);
 	}
 
 	/** Whether an earlier session was spent on the same thing, so its rate is a fair comparison. */
