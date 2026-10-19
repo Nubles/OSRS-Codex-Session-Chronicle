@@ -1,5 +1,8 @@
 package com.codex.sessionchronicle.core;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import java.util.List;
 
 /**
@@ -39,6 +42,84 @@ public final class LedgerWorth
 		this.total = total;
 		this.since = since;
 		this.history = history;
+	}
+
+	/**
+	 * Ledger's saved book, or null when it is not installed or cannot be read. Only "total", "since"
+	 * and "history" are read, so damage anywhere else in the ledger is no matter; a point of history
+	 * that cannot be read, or holds a worth no account has, is left out, and the rest put in order.
+	 */
+	public static LedgerWorth read(Gson gson, String json)
+	{
+		LedgerWorth read = null;
+		if (json == null || json.trim().isEmpty())
+		{
+			return null;
+		}
+		try
+		{
+			// The quick way, which skips the rest of the ledger unread.
+			read = gson.fromJson(json, LedgerWorth.class);
+		}
+		catch (RuntimeException e)
+		{
+			read = readByPoint(gson, json);
+		}
+		if (read == null)
+		{
+			return null;
+		}
+		List<Point> kept = new java.util.ArrayList<>();
+		if (read.history != null)
+		{
+			for (Point p : read.history)
+			{
+				if (p != null && p.t > 0 && p.v >= 0 && p.v <= Saved.MAX_WORTH)
+				{
+					kept.add(p);
+				}
+			}
+		}
+		kept.sort((a, b) -> Long.compare(a.t, b.t));
+		long total = read.total < 0 || read.total > Saved.MAX_WORTH ? 0 : read.total;
+		return new LedgerWorth(total, Math.max(0, read.since), kept);
+	}
+
+	private static LedgerWorth readByPoint(Gson gson, String json)
+	{
+		JsonElement root = Saved.tree(gson, json);
+		if (root == null || !root.isJsonObject())
+		{
+			return null;
+		}
+		JsonObject o = root.getAsJsonObject();
+		LedgerWorth read = new LedgerWorth(whole(o.get("total")), whole(o.get("since")), new java.util.ArrayList<>());
+		JsonElement list = o.get("history");
+		if (list != null && list.isJsonArray())
+		{
+			for (JsonElement e : list.getAsJsonArray())
+			{
+				Point p = Saved.as(gson, e, Point.class);
+				if (p != null)
+				{
+					read.history.add(p);
+				}
+			}
+		}
+		return read;
+	}
+
+	private static long whole(JsonElement e)
+	{
+		try
+		{
+			return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber()
+				? new java.math.BigDecimal(e.getAsString()).longValueExact() : 0;
+		}
+		catch (ArithmeticException | NumberFormatException ex)
+		{
+			return 0;
+		}
 	}
 
 	/** True once Ledger has seen the bank, which is when its total means the whole worth. */

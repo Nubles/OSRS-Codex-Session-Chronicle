@@ -1,5 +1,7 @@
 package com.codex.sessionchronicle.core;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -26,6 +28,57 @@ public final class Journal
 	private Journal()
 	{
 	}
+
+	/**
+	 * The saved journal, in the order it was saved; empty when there is none or it cannot be read. A
+	 * session that cannot be read is left out on its own, and a field of one that cannot be read is
+	 * left at its default, so one broken entry never costs the rest.
+	 */
+	public static List<Session> read(Gson gson, String json)
+	{
+		List<Session> out = new ArrayList<>();
+		if (json == null || json.trim().isEmpty())
+		{
+			return out;
+		}
+		try
+		{
+			// The quick way, whenever it all reads whole.
+			List<Session> whole = gson.fromJson(json, JOURNAL);
+			if (whole != null)
+			{
+				for (Session s : whole)
+				{
+					if (s != null && s.startedAt > 0)
+					{
+						out.add(s.repair());
+					}
+				}
+			}
+			return out;
+		}
+		catch (RuntimeException e)
+		{
+			// Something in it is broken: read it session by session below.
+		}
+		JsonElement root = Saved.tree(gson, json);
+		if (root != null && root.isJsonArray())
+		{
+			for (JsonElement e : root.getAsJsonArray())
+			{
+				Session s = Session.read(gson, e);
+				if (s != null)
+				{
+					out.add(s);
+				}
+			}
+		}
+		return out;
+	}
+
+	private static final java.lang.reflect.Type JOURNAL = new com.google.gson.reflect.TypeToken<List<Session>>()
+	{
+	}.getType();
 
 	/** Files a finished session at the front of the journal, keeping at most cap sessions. */
 	public static List<Session> file(List<Session> journal, Session session, int cap)

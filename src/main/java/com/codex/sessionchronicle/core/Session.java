@@ -1,5 +1,7 @@
 package com.codex.sessionchronicle.core;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,6 +15,124 @@ import java.util.regex.Pattern;
  */
 public class Session
 {
+	/** Most experience a skill can hold. */
+	static final long MAX_XP = 200_000_000L;
+	/** More kills of one thing than a session could hold; a line claiming more is damage and counts this many. */
+	static final int MAX_KILLS = 20_000;
+
+	/**
+	 * The session saved while it was open, or null when there is none or it cannot be read. A field
+	 * that cannot be read is left at its default rather than losing the session.
+	 */
+	public static Session read(Gson gson, String json)
+	{
+		return read(gson, Saved.tree(gson, json));
+	}
+
+	static Session read(Gson gson, JsonElement e)
+	{
+		Session s = Saved.mend(gson, e, Session.class);
+		return s == null || s.startedAt <= 0 ? null : s.repair();
+	}
+
+	/** Mends a session read back from storage, where any part may be missing or hold what no session could. */
+	Session repair()
+	{
+		if (skills == null)
+		{
+			skills = new LinkedHashMap<>();
+		}
+		skills.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null);
+		skills.forEach((name, line) ->
+		{
+			if (line.skill == null)
+			{
+				line.skill = name;
+			}
+			line.startXp = Saved.clamp(line.startXp, MAX_XP);
+			line.xp = Saved.clamp(line.xp, MAX_XP);
+			line.startLevel = (int) Saved.clamp(line.startLevel, 126);
+			line.level = (int) Saved.clamp(line.level, 126);
+		});
+		if (loot == null)
+		{
+			loot = new LinkedHashMap<>();
+		}
+		loot.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null);
+		loot.forEach((id, drop) ->
+		{
+			drop.quantity = Saved.clamp(drop.quantity, Integer.MAX_VALUE);
+			drop.price = Saved.clamp(drop.price, Integer.MAX_VALUE);
+			if (drop.name == null)
+			{
+				drop.name = "Item " + id;
+			}
+		});
+		if (kills == null)
+		{
+			kills = new LinkedHashMap<>();
+		}
+		kills.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null);
+		kills.forEach((key, line) ->
+		{
+			if (line.name == null)
+			{
+				line.name = key;
+			}
+			line.looted = (int) Saved.clamp(line.looted, MAX_KILLS);
+			if (line.counters != null)
+			{
+				line.counters.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null || e.getValue().length != 2
+					|| e.getValue()[0] <= 0 || e.getValue()[1] < e.getValue()[0]);
+			}
+			if (line.tasks != null)
+			{
+				line.tasks.entrySet().removeIf(e -> e.getKey() == null || e.getValue() == null || e.getValue() < 0);
+			}
+		});
+		if (moments == null)
+		{
+			moments = new ArrayList<>();
+		}
+		// A kind of moment this version does not know reads as none, and is left out.
+		moments.removeIf(m -> m == null || m.kind == null || m.title == null);
+		if (trips == null)
+		{
+			trips = new ArrayList<>();
+		}
+		trips.removeIf(t -> t == null);
+		if (slayerDone != null)
+		{
+			slayerDone.removeIf(t -> t == null || t.name == null);
+		}
+		if (slayer != null && slayer.name == null)
+		{
+			slayer = null;
+		}
+		if (goal != null && goal.kind == null)
+		{
+			goal = null;
+		}
+		lastSeenAt = Math.max(lastSeenAt, startedAt);
+		endedAt = endedAt == 0 ? 0 : Math.max(endedAt, startedAt);
+		playedMs = Saved.clamp(playedMs, Math.max(0, lastSeenAt - startedAt) + 60_000L);
+		deaths = (int) Saved.clamp(deaths, MAX_KILLS);
+		otherLoot = Saved.clamp(otherLoot, Saved.MAX_WORTH);
+		otherDrops = (int) Saved.clamp(otherDrops, Integer.MAX_VALUE);
+		tripCount = (int) Saved.clamp(tripCount, MAX_KILLS);
+		tripMs = Saved.clamp(tripMs, playedMs);
+		bestTripMs = Saved.clamp(bestTripMs, playedMs);
+		if (worthStart != null && (worthStart < 0 || worthStart > Saved.MAX_WORTH))
+		{
+			worthStart = null;
+		}
+		if (worthNow != null && (worthNow < 0 || worthNow > Saved.MAX_WORTH))
+		{
+			worthNow = null;
+		}
+		return this;
+	}
+
 	long startedAt;
 	long lastSeenAt;
 	long endedAt;
@@ -318,19 +438,22 @@ public class Session
 
 		public int count()
 		{
-			int counted = 0;
+			long counted = 0;
 			if (counters != null)
 			{
 				for (int[] range : counters.values())
 				{
-					counted += range[1] - range[0] + 1;
+					if (range != null && range.length == 2 && range[1] >= range[0])
+					{
+						counted += (long) range[1] - range[0] + 1;
+					}
 				}
 			}
-			else if (firstKc > 0)
+			else if (firstKc > 0 && lastKc >= firstKc)
 			{
-				counted = lastKc - firstKc + 1;
+				counted = (long) lastKc - firstKc + 1;
 			}
-			return Math.max(looted, counted);
+			return (int) Math.min(MAX_KILLS, Math.max(looted, counted));
 		}
 
 		/**

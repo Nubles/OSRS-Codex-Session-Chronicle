@@ -22,7 +22,6 @@ import com.codex.sessionchronicle.ui.SessionActions;
 import com.codex.sessionchronicle.ui.ItemIcons;
 import com.codex.sessionchronicle.ui.Sigil;
 import com.google.gson.Gson;
-import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import java.awt.Toolkit;
@@ -110,6 +109,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final Logger log = LoggerFactory.getLogger(CodexSessionChroniclePlugin.class);
 	private static final String CURRENT_KEY = "current";
 	private static final String JOURNAL_KEY = "journal";
+	/** Where a journal that could not be read at all is set aside, untouched, before it starts afresh. */
+	static final String DAMAGED_KEY = "journalUnreadable";
 	/** Codex Ledger's saved book, read only for its net worth; see LedgerWorth. */
 	static final String LEDGER_GROUP = "codexledger";
 	static final String LEDGER_KEY = "ledger";
@@ -665,19 +666,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			return null;
 		}
-		String json = configManager.getRSProfileConfiguration(LEDGER_GROUP, LEDGER_KEY);
-		if (json == null || json.isEmpty())
-		{
-			return null;
-		}
-		try
-		{
-			ledgerBook = gson.fromJson(json, LedgerWorth.class);
-		}
-		catch (RuntimeException e)
-		{
-			log.debug("Could not read Codex Ledger's book", e);
-		}
+		ledgerBook = LedgerWorth.read(gson, configManager.getRSProfileConfiguration(LEDGER_GROUP, LEDGER_KEY));
 		return ledgerBook;
 	}
 
@@ -990,33 +979,25 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			return;
 		}
-		try
+		String saved = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, JOURNAL_KEY);
+		List<Session> list = Journal.read(gson, saved);
+		if (list.isEmpty() && saved != null && !saved.trim().isEmpty() && !saved.trim().equals("[]"))
 		{
-			String saved = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, JOURNAL_KEY);
-			if (saved != null && !saved.isEmpty())
+			// Nothing in it could be read. The journal starts afresh, but the old one is set aside first
+			// (once, never over an earlier one) so the next session filed does not write over the only copy.
+			log.warn("Could not read the saved journal; it is kept as {}", DAMAGED_KEY);
+			if (configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, DAMAGED_KEY) == null)
 			{
-				List<Session> list = gson.fromJson(saved, JOURNAL_TYPE);
-				if (list != null)
-				{
-					list.removeIf(s -> s == null);
-					journal = list;
-					// Sessions filed before the activity was kept get it now, for Codex Ledger to read.
-					if (Journal.label(list))
-					{
-						storeJournal();
-					}
-				}
-			}
-			String current = configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, CURRENT_KEY);
-			if (current != null && !current.isEmpty())
-			{
-				chronicle.restore(gson.fromJson(current, Session.class));
+				configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, DAMAGED_KEY, saved);
 			}
 		}
-		catch (JsonParseException e)
+		journal = list;
+		// Sessions filed before the activity was kept get it now, for Codex Ledger to read.
+		if (Journal.label(list))
 		{
-			log.warn("Could not read the saved chronicle, starting it afresh", e);
+			storeJournal();
 		}
+		chronicle.restore(Session.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, CURRENT_KEY)));
 		summarisePast();
 		readLedgerBook();
 		// A session left open when the client closed may have ended long ago.
