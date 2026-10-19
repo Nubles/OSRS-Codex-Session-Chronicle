@@ -103,8 +103,8 @@ public interface CodexSessionChronicleConfig extends Config
 
 	@ConfigItem(
 		keyName = "nameOnCard",
-		name = "Name on card",
-		description = "Write your character's name on the session card",
+		name = "Name on cards",
+		description = "Write your character's name on the session and week cards and their text copies; turn off to share them without it",
 		position = 4,
 		section = display
 	)

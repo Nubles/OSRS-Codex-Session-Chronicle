@@ -195,7 +195,7 @@ public final class WeekCard
 				Ui.shadowed(g, Ui.clip(m.getTitle(), fm, right - tx), tx, y + fm.getAscent() - 2, Theme.mix(Theme.TEXT, color, 0.3));
 				g.setFont(Theme.small());
 				g.setColor(Theme.TEXT_MUTED);
-				String detail = Format.day(m.getAt()) + (m.getDetail() == null ? "" : ", " + m.getDetail());
+				String detail = Format.day(m.getAt()) + (m.getDetail() == null ? "" : ". " + m.getDetail());
 				g.drawString(Ui.clip(detail, small, right - tx), tx, y + fm.getAscent() + small.getAscent());
 				y += 32;
 			}
