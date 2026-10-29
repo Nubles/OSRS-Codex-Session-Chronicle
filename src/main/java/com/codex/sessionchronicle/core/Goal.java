@@ -16,7 +16,9 @@ public class Goal
 		XP("Experience", "xp"),
 		LOOT("Loot", "gp"),
 		KILLS("Kills", "kills"),
-		TIME("Time", "played");
+		TIME("Time", "played"),
+		/** Laps and skilling minigame rounds; last, so goals saved before it keep their kind. */
+		ROUNDS("Rounds", "rounds");
 
 		private final String label;
 		private final String unit;
@@ -87,6 +89,8 @@ public class Goal
 				return s.totalKills();
 			case TIME:
 				return s.playedMs;
+			case ROUNDS:
+				return s.totalRounds();
 			default:
 				return s.totalXp();
 		}
@@ -106,6 +110,8 @@ public class Goal
 				return Chronicle.mark(amount) + " loot";
 			case KILLS:
 				return amount + (amount == 1 ? " kill" : " kills");
+			case ROUNDS:
+				return amount + (amount == 1 ? " lap or round" : " laps and rounds");
 			case TIME:
 				long minutes = amount / 60_000;
 				String hours = minutes / 60 + "h" + (minutes % 60 > 0 ? " " + minutes % 60 + "m" : "");
@@ -143,6 +149,7 @@ public class Goal
 		{500_000, 1_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 250_000_000},
 		{10, 25, 50, 100, 250, 500, 1_000},
 		{30 * 60_000L, 60 * 60_000L, 120 * 60_000L, 180 * 60_000L, 240 * 60_000L, 360 * 60_000L},
+		{10, 25, 50, 100, 250, 500},
 	};
 
 	/**

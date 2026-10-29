@@ -26,7 +26,7 @@ import javax.swing.border.EmptyBorder;
  */
 final class GoalView
 {
-	static final String[] KINDS = {"XP", "Loot", "Kills", "Time"};
+	static final String[] KINDS = {"XP", "Loot", "Kills", "Time", "Rounds"};
 
 	private GoalView()
 	{
@@ -171,6 +171,8 @@ final class GoalView
 				return Format.amount(value) + (value == 1 ? " kill" : " kills");
 			case TIME:
 				return Format.duration(value).replace(" 0m", "");
+			case ROUNDS:
+				return Format.amount(value) + (value == 1 ? " round" : " rounds");
 			default:
 				return Format.amount(value) + " xp";
 		}

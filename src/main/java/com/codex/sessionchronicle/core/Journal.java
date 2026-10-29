@@ -588,7 +588,7 @@ public final class Journal
 					{
 						continue;
 					}
-					String key = line.getKind() + ":" + (line.getKind() == Pace.Kind.KILLS ? Chronicle.key(line.getName()) : line.getName());
+					String key = line.getKind() + ":" + (line.getKind() == Pace.Kind.KILLS || line.getKind() == Pace.Kind.ROUNDS ? Chronicle.key(line.getName()) : line.getName());
 					bests.computeIfAbsent(key, k -> new Best(line.getKind(), line.getName(), 0, 0)).add(s, line.getRate());
 				}
 			}

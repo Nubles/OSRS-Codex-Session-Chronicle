@@ -97,6 +97,7 @@ class PaceRow extends JComponent
 			case SKILL:
 				return Format.amount(rate) + " xp/hr";
 			case KILLS:
+			case ROUNDS:
 				return Format.amount(rate) + " " + Summary.noun(name) + "/hr";
 			default:
 				return Format.amount(rate) + " gp/hr";
@@ -139,13 +140,14 @@ class PaceRow extends JComponent
 
 	static Color color(Pace.Kind kind)
 	{
-		return kind == Pace.Kind.SKILL ? Theme.XP : kind == Pace.Kind.KILLS ? Theme.KILLS : Theme.LOOT;
+		return kind == Pace.Kind.SKILL ? Theme.XP : kind == Pace.Kind.KILLS || kind == Pace.Kind.ROUNDS ? Theme.KILLS : Theme.LOOT;
 	}
 
 	private static String tooltip(Pace.Line line)
 	{
 		String what = line.getKind() == Pace.Kind.SKILL ? "sessions spent mostly on " + line.getName()
 			: line.getKind() == Pace.Kind.KILLS ? "trips to " + line.getName()
+			: line.getKind() == Pace.Kind.ROUNDS ? "sessions of " + line.getName()
 			: "earlier sessions of the same kind";
 		if (line.getSamples() == 0)
 		{
