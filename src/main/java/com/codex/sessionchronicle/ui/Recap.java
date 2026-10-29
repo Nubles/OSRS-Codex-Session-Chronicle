@@ -109,6 +109,22 @@ public final class Recap
 			out.append(line).append('\n');
 		}
 
+		List<Session.KillLine> rounds = s.getRoundLines();
+		if (!rounds.isEmpty())
+		{
+			StringBuilder line = new StringBuilder("Laps and rounds: ");
+			for (int i = 0; i < rounds.size() && i < TOP; i++)
+			{
+				Session.KillLine k = rounds.get(i);
+				line.append(i > 0 ? ", " : "").append(k.getName()).append(" x").append(Format.count(k.count()));
+				if (k.getKillCount() > 0)
+				{
+					line.append(" (total ").append(Format.count(k.getKillCount())).append(')');
+				}
+			}
+			out.append(line).append('\n');
+		}
+
 		SlayerTask task = s.getSlayer();
 		if (task != null && task.getTotal() > 0)
 		{

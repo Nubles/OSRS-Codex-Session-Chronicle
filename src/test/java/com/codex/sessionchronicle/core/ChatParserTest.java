@@ -23,6 +23,21 @@ public class ChatParserTest
 		kc = ChatParser.killCount("Your Chambers of Xeric count is: 7.");
 		assertEquals("Chambers of Xeric", kc.getName());
 
+		kc = ChatParser.killCount("Your Seers' Village Rooftop lap count is: 312.");
+		assertEquals("Seers' Village Rooftop lap", kc.getName());
+		assertEquals(312, kc.getCount());
+
+		kc = ChatParser.killCount("Your subdued Wintertodt count is: 50.");
+		assertEquals("Wintertodt", kc.getName());
+
+		kc = ChatParser.killCount("Amount of rifts you have closed: 1,204.");
+		assertEquals("Guardians of the Rift", kc.getName());
+		assertEquals(1204, kc.getCount());
+
+		kc = ChatParser.killCount("You have completed 87 contracts with a total of 1,045 points.");
+		assertEquals("Mahogany Homes", kc.getName());
+		assertEquals(87, kc.getCount());
+
 		assertNull(ChatParser.killCount("You have a funny feeling like you're being followed."));
 	}
 

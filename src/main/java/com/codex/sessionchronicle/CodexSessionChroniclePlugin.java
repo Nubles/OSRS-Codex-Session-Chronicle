@@ -207,6 +207,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	/** When the slayer task's varps are read, and whether a reading is the first since a login or hop. */
 	private final SlayerWatch slayer = new SlayerWatch();
 	private long recentKcAt;
+	/** Giants' Foundry reputation last read, or -1 until it is read afresh after logging in or hopping. */
+	private int foundryPoints = -1;
 
 	@Provides
 	CodexSessionChronicleConfig provideConfig(ConfigManager configManager)
@@ -430,6 +432,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			// The client takes its varps afresh in the new world: the task may read nothing for a few ticks.
 			slayer.arrived();
+			foundryPoints = -1;
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -442,6 +445,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		else if (state == GameState.LOGIN_SCREEN)
 		{
 			pendingBegin = false;
+			foundryPoints = -1;
 			if (chronicle.isLive())
 			{
 				chronicle.pause(System.currentTimeMillis());
@@ -522,6 +526,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		guard();
 		chronicle.tick(now);
 		ticks++;
+		readFoundry();
 		slayer.tick();
 		if (slayer.isDue())
 		{
@@ -823,6 +828,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			slayer.moved();
 		}
+	}
+
+	/**
+	 * The Giants' Foundry says nothing in chat when a sword is handed in, but its reputation only
+	 * ever rises then (buying from the shop spends it), so each rise is one sword.
+	 */
+	private void readFoundry()
+	{
+		int points = client.getVarpValue(VarPlayerID.GIANTS_FOUNDRY_REWARD_SHOP_POINTS);
+		if (foundryPoints >= 0 && points > foundryPoints)
+		{
+			chronicle.round(Chronicle.GIANTS_FOUNDRY);
+			dirty = true;
+		}
+		foundryPoints = points;
 	}
 
 	/** Reads the slayer task as the game's slayer helper shows it, and tells the session. */

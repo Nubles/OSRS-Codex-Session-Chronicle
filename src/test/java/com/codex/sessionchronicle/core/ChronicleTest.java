@@ -361,4 +361,28 @@ public class ChronicleTest
 		}
 		assertEquals("Woodcutting level 81", Summary.of(c.current(), Summary.State.LIVE).headline());
 	}
+
+	@Test
+	public void lapsAndMinigamesAreRoundsNotKills()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.killCount("Seers' Village Rooftop lap", 300);
+		c.killCount("Seers' Village Rooftop lap", 311);
+		c.killCount("Guardians of the Rift", 1204);
+		c.round(Chronicle.GIANTS_FOUNDRY);
+		c.round(Chronicle.GIANTS_FOUNDRY);
+		c.killCount("Vorkath", 50);
+
+		assertEquals("only Vorkath is a kill", 1, c.current().totalKills());
+		Summary s = Summary.of(c.current(), Summary.State.LIVE);
+		assertEquals(1, s.getKillLines().size());
+		assertEquals(3, s.getRoundLines().size());
+		assertEquals("Seers' Village Rooftop lap", s.getRoundLines().get(0).getName());
+		assertEquals(12, s.getRoundLines().get(0).count());
+		Session.KillLine foundry = s.getRoundLines().get(1);
+		assertEquals("Giants' Foundry", foundry.getName());
+		assertEquals(2, foundry.count());
+		assertTrue(s.getOpenedLines().isEmpty());
+	}
 }

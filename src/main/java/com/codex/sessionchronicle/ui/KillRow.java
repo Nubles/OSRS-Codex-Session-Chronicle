@@ -61,7 +61,11 @@ class KillRow extends JComponent
 
 	private static String kcText(Session.KillLine line)
 	{
-		return line.getKillCount() > 0 ? "KC " + Format.count(line.getKillCount()) : "";
+		if (line.getKillCount() <= 0)
+		{
+			return "";
+		}
+		return (line.isRound() ? "Total " : "KC ") + Format.count(line.getKillCount());
 	}
 
 	private static int nameWidth(Graphics2D g, Session.KillLine line, int w)

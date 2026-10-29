@@ -353,6 +353,24 @@ public class Chronicle
 		return null;
 	}
 
+	/** The minigame line a handed-in Giants' Foundry sword counts on. */
+	public static final String GIANTS_FOUNDRY = "Giants' Foundry";
+
+	/**
+	 * One round of a minigame the game keeps no count of in chat, such as a Giants' Foundry sword.
+	 * It counts on its own line, as a kill count does, so a skiller sees their rounds too.
+	 */
+	public void round(String name)
+	{
+		if (current == null)
+		{
+			return;
+		}
+		Session.KillLine line = kill(name);
+		line.looted++;
+		line.event = false;
+	}
+
 	/** The game's own kill count after a kill. */
 	public void killCount(String name, int count)
 	{
