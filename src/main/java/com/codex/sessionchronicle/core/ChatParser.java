@@ -12,6 +12,9 @@ public final class ChatParser
 {
 	private static final Pattern KILL_COUNT = Pattern.compile(
 		"^Your (?:completed |subdued )?(.+?) (?:kill |success |completion )?count is: ?([\\d,]+)\\b");
+	/** Skilling minigames that announce their total in words of their own, by the line they count on. */
+	private static final Pattern RIFTS = Pattern.compile("^Amount of rifts you have closed: ?([\\d,]+)");
+	private static final Pattern CONTRACTS = Pattern.compile("^You have completed ([\\d,]+) contracts? with a total of");
 	private static final Pattern COLLECTION = Pattern.compile("^New item added to your collection log: (.+?)\\.?$");
 	private static final Pattern QUEST = Pattern.compile("^Congratulations,? you've completed a quest: (.+?)\\.?$");
 	private static final Pattern DIARY = Pattern.compile(
@@ -56,13 +59,30 @@ public final class ChatParser
 	public static KillCount killCount(String message)
 	{
 		Matcher m = KILL_COUNT.matcher(message);
-		if (!m.find())
+		String name;
+		String count;
+		if (m.find())
+		{
+			name = m.group(1);
+			count = m.group(2);
+		}
+		else if ((m = RIFTS.matcher(message)).find())
+		{
+			name = "Guardians of the Rift";
+			count = m.group(1);
+		}
+		else if ((m = CONTRACTS.matcher(message)).find())
+		{
+			name = "Mahogany Homes";
+			count = m.group(1);
+		}
+		else
 		{
 			return null;
 		}
 		try
 		{
-			return new KillCount(m.group(1), Integer.parseInt(m.group(2).replace(",", "")));
+			return new KillCount(name, Integer.parseInt(count.replace(",", "")));
 		}
 		catch (NumberFormatException e)
 		{

@@ -57,6 +57,7 @@ public final class Summary
 	private final long bestTripMs;
 	private final long outFor;
 	private final List<Session.KillLine> opened;
+	private final List<Session.KillLine> rounds;
 	private final List<Moment> moments;
 	private final List<Moment> highlights;
 	private final Goal goal;
@@ -108,12 +109,14 @@ public final class Summary
 		killLines = Collections.unmodifiableList(killList);
 		List<Session.KillLine> real = new ArrayList<>();
 		List<Session.KillLine> open = new ArrayList<>();
+		List<Session.KillLine> laps = new ArrayList<>();
 		for (Session.KillLine line : killList)
 		{
-			(line.isKill() ? real : open).add(line);
+			(line.isRound() ? laps : line.isKill() ? real : open).add(line);
 		}
 		realKills = Collections.unmodifiableList(real);
 		opened = Collections.unmodifiableList(open);
+		rounds = Collections.unmodifiableList(laps);
 
 		List<Moment> momentList = new ArrayList<>(s.moments);
 		momentList.sort(Comparator.comparingLong(Moment::getAt));
@@ -317,6 +320,12 @@ public final class Summary
 		return worthChange == null ? 0 : perHour(worthChange);
 	}
 
+	/** Rooftop laps and skilling minigame rounds, most first. */
+	public List<Session.KillLine> getRoundLines()
+	{
+		return rounds;
+	}
+
 	/** Bird nests, crates and caskets opened, most first: loot that came without a kill. */
 	public List<Session.KillLine> getOpenedLines()
 	{
@@ -437,7 +446,7 @@ public final class Summary
 		Session.KillLine boss = null;
 		for (Session.KillLine line : killLines)
 		{
-			if (line.getKillCount() > 0)
+			if (line.getKillCount() > 0 && line.isKill())
 			{
 				boss = line;
 				break;

@@ -405,6 +405,14 @@ public class Session
 	{
 		private static final Pattern NOT_KILLS = Pattern.compile(
 			"(?i)\\b(?:bird nest|supply crate|reward pool|reward cart|casket|clue scroll|loot sack|seed pack|herbiboar|impling|spoils of war)");
+		/**
+		 * Laps and skilling minigames the game counts like kills ("Your Seers' Village Rooftop lap count
+		 * is", "Your subdued Wintertodt count is"): rounds of an activity, not kills.
+		 */
+		private static final Pattern CONTAINERS = Pattern.compile(
+			"(?i)\\b(?:supply crate|reward pool|reward cart|casket|loot sack|seed pack|spoils of war)");
+		private static final Pattern ROUNDS = Pattern.compile(
+			"(?i)(?:\\blap\\b|wintertodt|tempoross|guardians of the rift|mahogany homes|giants' foundry|herbiboar harvest)");
 
 		String name;
 		int looted;
@@ -469,6 +477,10 @@ public class Session
 		 */
 		public boolean isKill()
 		{
+			if (isRound())
+			{
+				return false;
+			}
 			if (firstKc > 0 || counters != null && !counters.isEmpty())
 			{
 				return true;
@@ -479,6 +491,13 @@ public class Session
 			}
 			// Saved before the source was kept: judge by the name the Loot Tracker gives such loot.
 			return name == null || !NOT_KILLS.matcher(name).find();
+		}
+
+		/** A rooftop lap or a round of a skilling minigame, listed apart from kills. */
+		public boolean isRound()
+		{
+			// "Supply crate (Wintertodt)" or "Reward pool (Tempoross)" is loot opened, not a round.
+			return name != null && ROUNDS.matcher(name).find() && !CONTAINERS.matcher(name).find();
 		}
 
 		/** Kills looted under a slayer task by its name, or empty in older saves. */

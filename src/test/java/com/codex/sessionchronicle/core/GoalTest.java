@@ -175,7 +175,10 @@ public class GoalTest
 			+ "\"supply crate\":{\"name\":\"Supply crate (Wintertodt)\",\"looted\":4},"
 			+ "\"wintertodt\":{\"name\":\"Wintertodt\",\"firstKc\":10,\"lastKc\":13},"
 			+ "\"abyssal demon\":{\"name\":\"Abyssal demon\",\"looted\":7}}}", Session.class);
-		assertEquals(4 + 7, s.totalKills());
+		// Wintertodt is a skilling round, listed with laps, so only the demons are kills.
+		assertEquals(7, s.totalKills());
+		assertTrue(s.kills.get("wintertodt").isRound());
+		assertFalse(s.kills.get("supply crate").isRound());
 	}
 
 	@Test

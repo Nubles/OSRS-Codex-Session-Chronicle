@@ -168,6 +168,23 @@ final class SessionView
 			}
 		}
 
+		List<Session.KillLine> rounds = s.getRoundLines();
+		if (!rounds.isEmpty())
+		{
+			// Laps and skilling minigames the game counts like kills; a skiller's rounds, not kills.
+			int total = 0;
+			for (Session.KillLine line : rounds)
+			{
+				total += line.count();
+			}
+			stack.add(new SectionHeader("Laps and rounds", Format.count(total)));
+			int top = rounds.get(0).count();
+			for (int i = 0; i < rounds.size() && i < KILLS; i++)
+			{
+				stack.add(new KillRow(rounds.get(i), rounds.get(i).count() / (double) top, icons));
+			}
+		}
+
 		List<Session.KillLine> opened = s.getOpenedLines();
 		if (!opened.isEmpty())
 		{
