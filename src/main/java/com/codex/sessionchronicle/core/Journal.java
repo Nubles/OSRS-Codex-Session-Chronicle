@@ -142,6 +142,7 @@ public final class Journal
 		c.playedMs = s.playedMs;
 		c.player = s.player;
 		c.deaths = s.deaths;
+		c.supplies = s.supplies;
 		c.goal = s.getGoal();
 		c.worthStart = s.worthStart;
 		c.worthNow = s.worthNow;
@@ -588,7 +589,7 @@ public final class Journal
 					{
 						continue;
 					}
-					String key = line.getKind() + ":" + (line.getKind() == Pace.Kind.KILLS ? Chronicle.key(line.getName()) : line.getName());
+					String key = line.getKind() + ":" + (line.getKind() == Pace.Kind.KILLS || line.getKind() == Pace.Kind.ROUNDS ? Chronicle.key(line.getName()) : line.getName());
 					bests.computeIfAbsent(key, k -> new Best(line.getKind(), line.getName(), 0, 0)).add(s, line.getRate());
 				}
 			}

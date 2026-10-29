@@ -150,6 +150,13 @@ final class SessionView
 		if (!drops.isEmpty())
 		{
 			stack.add(new SectionHeader("Loot", Format.coins(s.getLootValue())));
+			if (s.getSupplies() > 0)
+			{
+				// What the food, potions, runes and ammunition cost, and what the session made after them.
+				long profit = s.getProfit();
+				stack.add(Ui.label("Supplies used " + Format.coins(s.getSupplies()) + ", profit " + (profit < 0 ? "-" : "") + Format.coins(Math.abs(profit)),
+					Theme.small(), profit < 0 ? Theme.EMBER : Theme.TEXT_MUTED));
+			}
 			stack.add(new ItemGrid(drops.subList(0, Math.min(DROPS, drops.size())), items, 5));
 			int more = drops.size() - DROPS + s.getOtherDrops();
 			if (more > 0)

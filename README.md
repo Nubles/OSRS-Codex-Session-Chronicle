@@ -13,8 +13,10 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 ## What you get
 
 - **Session.** A clock that fills through each hour you play, a headline ("99 Ranged!", "24 Vorkath kills", "Mining at 214k/hr"), experience and loot with their hourly rates, levels and kills, then every skill trained, the best loot and the session's moments.
+- **Profit.** Food eaten, potion doses drunk, and runes, ammunition and cannonballs used are priced and taken off the loot, so you see what the session really made. Items dropped, banked or lost on death are not counted as used.
+- **Laps and rounds.** Rooftop laps and skilling minigames (Wintertodt, Tempoross, Guardians of the Rift, Mahogany Homes, Giants' Foundry, herbiboar) get their own list, a rounds goal, rounds an hour in Pace and headlines like "48 Seers' Village Rooftop laps". They never count as kills.
 - **Pace.** Your main skill's experience an hour, kills an hour and loot an hour set beside your earlier sessions of the same kind: "Faster than your best", "About your usual".
-- **Goals.** Give the session a goal with one click (experience, loot, kills or play time), with offers drawn from your own journal, and see when you should reach it at your pace.
+- **Goals.** Give the session a goal with one click (experience, loot, kills, laps and rounds, or play time), with offers drawn from your own journal, and see when you should reach it at your pace.
 - **Trips.** Each trip out from the bank and back, timed in play time, with what it brought; your average and quickest.
 - **Slayer.** Your task: how many are left, your kill rate and when it should be done.
 - **Moments.** Levels, pets, new collection log slots, valuable drops, quests, diaries, clue scrolls, personal bests and deaths, each with its time. Personal records (your fastest Mining yet, your quickest Vorkath trip, your richest session) become moments when a session ends.

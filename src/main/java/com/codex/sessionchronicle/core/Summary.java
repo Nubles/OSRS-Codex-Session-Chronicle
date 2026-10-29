@@ -41,6 +41,8 @@ public final class Summary
 	private final long playedMs;
 	private final long totalXp;
 	private final long lootValue;
+	private final long supplies;
+	private final int roundTotal;
 	private final int levels;
 	private final int kills;
 	private final int deaths;
@@ -76,6 +78,8 @@ public final class Summary
 		playedMs = s.playedMs;
 		totalXp = s.totalXp();
 		lootValue = s.lootValue();
+		supplies = s.getSupplies();
+		roundTotal = s.totalRounds();
 		levels = s.levelsGained();
 		kills = s.totalKills();
 		deaths = s.deaths;
@@ -186,7 +190,7 @@ public final class Summary
 		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
 			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player
 			+ "/" + (s.goal == null ? "-" : s.goal.getKind() + ":" + s.goal.getTarget() + ":" + s.goal.isReached())
-			+ "/" + s.pace.size() + "/" + s.presets.size();
+			+ "/" + s.pace.size() + "/" + s.presets.size() + "/" + s.supplies + "/" + s.roundTotal;
 	}
 
 	public State getState()
@@ -217,6 +221,18 @@ public final class Summary
 	public long getTotalXp()
 	{
 		return totalXp;
+	}
+
+	/** Coins' worth of food, potions, runes and ammunition used, or 0 when none was seen. */
+	public long getSupplies()
+	{
+		return supplies;
+	}
+
+	/** Loot less supplies used: what the session really made. */
+	public long getProfit()
+	{
+		return lootValue - supplies;
 	}
 
 	public long getLootValue()
@@ -462,11 +478,16 @@ public final class Summary
 		{
 			return gained + " " + top.getSkill() + " levels";
 		}
+		// A skiller's laps or minigame rounds say more than the skill's rate.
+		if (!rounds.isEmpty() && rounds.get(0).count() >= 5 && (top == null || !COMBAT.contains(top.getSkill())))
+		{
+			return rounds(rounds.get(0));
+		}
 		// A slayer grind outranks its combat levels; bird nests, crates and reward pools are loot of
 		// a skilling session and never outrank the skill.
-		if (!killLines.isEmpty() && killLines.get(0).count() >= 10 && (top == null || COMBAT.contains(top.getSkill())))
+		if (!realKills.isEmpty() && realKills.get(0).count() >= 10 && (top == null || COMBAT.contains(top.getSkill())))
 		{
-			return kills(killLines.get(0));
+			return kills(realKills.get(0));
 		}
 		if (top != null)
 		{
@@ -479,7 +500,8 @@ public final class Summary
 		}
 		if (!killLines.isEmpty())
 		{
-			return kills(killLines.get(0));
+			Session.KillLine first = killLines.get(0);
+			return first.isRound() ? rounds(first) : kills(first);
 		}
 		if (lootValue > 0)
 		{
@@ -491,6 +513,10 @@ public final class Summary
 	/** What one of a kill line counts, in the plural: "kills", "clears" for raids and runs, "clues" for caskets. */
 	public static String noun(String name)
 	{
+		if (Session.KillLine.isRound(name))
+		{
+			return Session.KillLine.roundNoun(name);
+		}
 		if (CLUE.matcher(name).matches())
 		{
 			return "clues";
@@ -504,6 +530,20 @@ public final class Summary
 			}
 		}
 		return "kills";
+	}
+
+	/** "48 Seers' Village Rooftop laps", "12 Giants' Foundry swords": a round line in a few words. */
+	static String rounds(Session.KillLine line)
+	{
+		int n = line.count();
+		String name = line.getName();
+		String noun = Session.KillLine.roundNoun(name);
+		if ("laps".equals(noun))
+		{
+			// The game names the line "Seers' Village Rooftop lap".
+			return n + " " + name + (n == 1 ? "" : "s");
+		}
+		return n + " " + name + " " + (n == 1 ? noun.substring(0, noun.length() - 1) : noun);
 	}
 
 	/** "24 Vorkath kills", "3 Chambers of Xeric clears", "12 medium clues": what the count stands for. */

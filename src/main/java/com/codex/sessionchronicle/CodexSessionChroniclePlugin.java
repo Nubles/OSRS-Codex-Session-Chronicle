@@ -11,6 +11,7 @@ import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Saved;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerWatch;
+import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.core.Week;
 import com.codex.sessionchronicle.overlay.SessionTicker;
@@ -51,7 +52,11 @@ import javax.swing.SwingUtilities;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.EnumComposition;
+import net.runelite.api.EquipmentInventorySlot;
+import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.ItemContainer;
 import net.runelite.api.NPC;
 import net.runelite.api.Actor;
 import net.runelite.api.Player;
@@ -62,6 +67,9 @@ import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.api.EnumID;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.DBTableID;
@@ -209,6 +217,28 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private long recentKcAt;
 	/** Giants' Foundry reputation last read, or -1 until it is read afresh after logging in or hopping. */
 	private int foundryPoints = -1;
+	/** Food, potions, runes and ammunition used, read from what is carried tick by tick. */
+	private final SupplyWatch supplies = new SupplyWatch();
+	/** Banks, shops, trades and the exchange open now: items leave through them without being used. */
+	private final Set<Integer> busy = new HashSet<>();
+	/** Items seen in the ammunition or weapon slot as a stack: fired or thrown when they go down. */
+	private final Set<Integer> ammo = new HashSet<>();
+	/** Whether an item is a rune or cannonball, by id, so names are looked up once. */
+	private final Map<Integer, Boolean> spendable = new HashMap<>();
+	private static final int[][] POUCH = {
+		{VarbitID.RUNE_POUCH_TYPE_1, VarbitID.RUNE_POUCH_QUANTITY_1},
+		{VarbitID.RUNE_POUCH_TYPE_2, VarbitID.RUNE_POUCH_QUANTITY_2},
+		{VarbitID.RUNE_POUCH_TYPE_3, VarbitID.RUNE_POUCH_QUANTITY_3},
+		{VarbitID.RUNE_POUCH_TYPE_4, VarbitID.RUNE_POUCH_QUANTITY_4},
+		{VarbitID.RUNE_POUCH_TYPE_5, VarbitID.RUNE_POUCH_QUANTITY_5},
+		{VarbitID.RUNE_POUCH_TYPE_6, VarbitID.RUNE_POUCH_QUANTITY_6},
+	};
+	private static final Set<Integer> BUSY = new HashSet<>(java.util.Arrays.asList(InterfaceID.BANKMAIN, InterfaceID.BANK_DEPOSITBOX,
+		InterfaceID.SHOPMAIN, InterfaceID.TRADEMAIN, InterfaceID.TRADECONFIRM, InterfaceID.GE_OFFERS, InterfaceID.SEED_VAULT,
+		InterfaceID.SEED_VAULT_DEPOSIT));
+	/** Menu options that send items away unused: anything that leaves straight after them is not spent. */
+	private static final Set<String> AWAY = new HashSet<>(java.util.Arrays.asList("drop", "destroy", "deposit", "deposit-all", "store",
+		"empty", "fill", "give", "release", "use", "bank", "trade with", "offer", "sell"));
 
 	@Provides
 	CodexSessionChronicleConfig provideConfig(ConfigManager configManager)
@@ -433,6 +463,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			// The client takes its varps afresh in the new world: the task may read nothing for a few ticks.
 			slayer.arrived();
 			foundryPoints = -1;
+			supplies.reset();
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -446,6 +477,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			pendingBegin = false;
 			foundryPoints = -1;
+			supplies.reset();
+			busy.clear();
 			if (chronicle.isLive())
 			{
 				chronicle.pause(System.currentTimeMillis());
@@ -527,6 +560,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		chronicle.tick(now);
 		ticks++;
 		readFoundry();
+		readSupplies();
 		slayer.tick();
 		if (slayer.isDue())
 		{
@@ -679,6 +713,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded event)
 	{
+		if (BUSY.contains(event.getGroupId()))
+		{
+			busy.add(event.getGroupId());
+		}
 		if (isBank(event.getGroupId()) && chronicle.isLive() && chronicle.bank(true) != null)
 		{
 			dirty = true;
@@ -689,6 +727,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onWidgetClosed(WidgetClosed event)
 	{
+		if (busy.remove(event.getGroupId()))
+		{
+			// The bank's last items moved this tick; read afresh rather than count them as used.
+			supplies.reset();
+		}
 		if (isBank(event.getGroupId()) && chronicle.isLive())
 		{
 			chronicle.bank(false);
@@ -828,6 +871,87 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			slayer.moved();
 		}
+	}
+
+	@Subscribe
+	public void onMenuOptionClicked(MenuOptionClicked event)
+	{
+		String option = event.getMenuOption() == null ? "" : Text.removeTags(event.getMenuOption()).toLowerCase(Locale.ROOT);
+		if (option.equals("eat") || option.equals("drink"))
+		{
+			supplies.ate(client.getTickCount());
+		}
+		else if (AWAY.contains(option))
+		{
+			supplies.quiet(client.getTickCount());
+		}
+	}
+
+	/** What is carried (inventory, worn items, rune pouch), priced against the last tick's. */
+	private void readSupplies()
+	{
+		Map<Integer, Integer> carried = new HashMap<>();
+		add(carried, client.getItemContainer(InventoryID.INV));
+		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
+		add(carried, worn);
+		if (worn != null)
+		{
+			for (EquipmentInventorySlot slot : new EquipmentInventorySlot[]{EquipmentInventorySlot.AMMO, EquipmentInventorySlot.WEAPON})
+			{
+				Item item = worn.getItem(slot.getSlotIdx());
+				if (item != null && item.getId() > 0 && item.getQuantity() > 1)
+				{
+					ammo.add(item.getId());
+				}
+			}
+		}
+		EnumComposition runes = client.getEnum(EnumID.RUNEPOUCH_RUNE);
+		for (int[] pouch : POUCH)
+		{
+			int type = client.getVarbitValue(pouch[0]);
+			int quantity = client.getVarbitValue(pouch[1]);
+			int id = type > 0 && runes != null ? runes.getIntValue(type) : -1;
+			if (id > 0 && quantity > 0)
+			{
+				carried.merge(id, quantity, Integer::sum);
+			}
+		}
+		long used = supplies.read(client.getTickCount(), carried, !busy.isEmpty(), this::spendable,
+			id -> itemManager.getItemPrice(itemManager.canonicalize(id)));
+		if (used > 0)
+		{
+			chronicle.used(used);
+			dirty = true;
+		}
+	}
+
+	private static void add(Map<Integer, Integer> carried, ItemContainer container)
+	{
+		if (container == null)
+		{
+			return;
+		}
+		for (Item item : container.getItems())
+		{
+			if (item != null && item.getId() > 0 && item.getQuantity() > 0)
+			{
+				carried.merge(item.getId(), item.getQuantity(), Integer::sum);
+			}
+		}
+	}
+
+	/** Runes, cannonballs and fired or thrown ammunition are used up whenever they go down. */
+	private boolean spendable(int id)
+	{
+		if (ammo.contains(id))
+		{
+			return true;
+		}
+		return spendable.computeIfAbsent(id, i ->
+		{
+			String name = itemManager.getItemComposition(i).getName().toLowerCase(Locale.ROOT);
+			return name.endsWith(" rune") || name.contains("cannonball");
+		});
 	}
 
 	/**
@@ -985,6 +1109,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 			Actor foe = player.getInteracting();
 			String killer = foe instanceof NPC && foe.getName() != null ? Text.removeTags(foe.getName()) : null;
 			chronicle.death(System.currentTimeMillis(), killer);
+			// What was lost waits at the grave; it is not spent.
+			supplies.quiet(client.getTickCount() + 10);
 			dirty = true;
 			saveSoon = true;
 		}

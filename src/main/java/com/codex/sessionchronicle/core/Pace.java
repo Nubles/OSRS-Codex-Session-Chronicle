@@ -22,7 +22,9 @@ public final class Pace
 		/** Kills or clears an hour of one monster or raid. */
 		KILLS,
 		/** Loot an hour on trips to one monster, or sessions of one skill. */
-		LOOT
+		LOOT,
+		/** Laps or rounds an hour of one course or skilling minigame. */
+		ROUNDS
 	}
 
 	/** One rate, set beside the player's usual and best for the same activity. */
@@ -134,6 +136,11 @@ public final class Pace
 		{
 			lines.add(line(Kind.KILLS, kill.getName(), s, journal));
 		}
+		Session.KillLine round = topRound(s);
+		if (round != null)
+		{
+			lines.add(line(Kind.ROUNDS, round.getName(), s, journal));
+		}
 		if (s.lootValue() > 0)
 		{
 			lines.add(line(Kind.LOOT, kill != null ? kill.getName() : skill != null ? skill.getSkill() : null, s, journal));
@@ -186,6 +193,9 @@ public final class Pace
 				return skill != null && skill.getSkill().equals(name);
 			case KILLS:
 				return kill != null && Chronicle.key(kill.getName()).equals(Chronicle.key(name));
+			case ROUNDS:
+				Session.KillLine round = topRound(past);
+				return round != null && Chronicle.key(round.getName()).equals(Chronicle.key(name));
 			default:
 				return kill != null ? Chronicle.key(kill.getName()).equals(Chronicle.key(name))
 					: skill != null && skill.getSkill().equals(name);
@@ -202,6 +212,7 @@ public final class Pace
 				amount = line == null ? 0 : line.gained();
 				break;
 			case KILLS:
+			case ROUNDS:
 				Session.KillLine kills = s.kills.get(Chronicle.key(name));
 				amount = kills == null ? 0 : kills.count();
 				break;
@@ -230,6 +241,20 @@ public final class Pace
 		for (Session.SkillLine line : s.skills.values())
 		{
 			if (line.gained() > 0 && (top == null || line.gained() > top.gained()))
+			{
+				top = line;
+			}
+		}
+		return top;
+	}
+
+	/** The course or skilling minigame with the most laps or rounds, or null. */
+	static Session.KillLine topRound(Session s)
+	{
+		Session.KillLine top = null;
+		for (Session.KillLine line : s.kills.values())
+		{
+			if (line.isRound() && line.count() > 0 && (top == null || line.count() > top.count()))
 			{
 				top = line;
 			}

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -124,6 +125,10 @@ public class Session
 		endedAt = endedAt == 0 ? 0 : Math.max(endedAt, startedAt);
 		deaths = (int) Saved.clamp(deaths, MAX_KILLS);
 		otherLoot = Saved.clamp(otherLoot, Saved.MAX_WORTH);
+		if (supplies != null && (supplies <= 0 || supplies > Saved.MAX_WORTH))
+		{
+			supplies = null;
+		}
 		otherDrops = (int) Saved.clamp(otherDrops, Integer.MAX_VALUE);
 		tripCount = (int) Saved.clamp(tripCount, MAX_KILLS);
 		tripMs = Saved.clamp(tripMs, playedMs);
@@ -149,6 +154,8 @@ public class Session
 	Map<String, KillLine> kills = new LinkedHashMap<>();
 	List<Moment> moments = new ArrayList<>();
 	int deaths;
+	/** Coins' worth of food, potions, runes and ammunition used; null while none was, and in older saves. */
+	Long supplies;
 	/** Loot trimmed from the session when it was filed in the journal, so the totals still add up. */
 	long otherLoot;
 	int otherDrops;
@@ -302,6 +309,32 @@ public class Session
 		return (int) Math.min(total, MAX_KILLS);
 	}
 
+	/** Coins' worth of food, potions, runes and ammunition used. */
+	public long getSupplies()
+	{
+		return supplies == null ? 0 : supplies;
+	}
+
+	/** Loot less the supplies used to get it. */
+	public long profit()
+	{
+		return lootValue() - getSupplies();
+	}
+
+	/** Laps and skilling minigame rounds, all lines together. */
+	public int totalRounds()
+	{
+		long total = 0;
+		for (KillLine line : kills.values())
+		{
+			if (line.isRound())
+			{
+				total += line.count();
+			}
+		}
+		return (int) Math.min(total, MAX_KILLS);
+	}
+
 	/** A session with nothing in it is not worth a page in the journal. */
 	boolean isEmpty()
 	{
@@ -411,6 +444,7 @@ public class Session
 		 */
 		private static final Pattern CONTAINERS = Pattern.compile(
 			"(?i)\\b(?:supply crate|reward pool|reward cart|casket|loot sack|seed pack|spoils of war)");
+		private static final Pattern LAP = Pattern.compile("\\blap\\b");
 		private static final Pattern ROUNDS = Pattern.compile(
 			"(?i)(?:\\blap\\b|wintertodt|tempoross|guardians of the rift|mahogany homes|giants' foundry|herbiboar harvest)");
 
@@ -496,8 +530,37 @@ public class Session
 		/** A rooftop lap or a round of a skilling minigame, listed apart from kills. */
 		public boolean isRound()
 		{
+			return isRound(name);
+		}
+
+		/** Whether a line of this name is a lap or a skilling minigame round. */
+		static boolean isRound(String name)
+		{
 			// "Supply crate (Wintertodt)" or "Reward pool (Tempoross)" is loot opened, not a round.
 			return name != null && ROUNDS.matcher(name).find() && !CONTAINERS.matcher(name).find();
+		}
+
+		/** What one round of this line is called, in the plural: "laps", "swords", "contracts", "games". */
+		static String roundNoun(String name)
+		{
+			String n = name.toLowerCase(Locale.ROOT);
+			if (LAP.matcher(n).find())
+			{
+				return "laps";
+			}
+			if (n.contains("foundry"))
+			{
+				return "swords";
+			}
+			if (n.contains("mahogany"))
+			{
+				return "contracts";
+			}
+			if (n.contains("herbiboar"))
+			{
+				return "harvests";
+			}
+			return "games";
 		}
 
 		/** Kills looted under a slayer task by its name, or empty in older saves. */

@@ -385,4 +385,41 @@ public class ChronicleTest
 		assertEquals(2, foundry.count());
 		assertTrue(s.getOpenedLines().isEmpty());
 	}
+
+	@Test
+	public void roundsGetGoalsPaceAndAHeadline()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.tick(0);
+		for (int i = 0; i < 12; i++)
+		{
+			c.round(Chronicle.GIANTS_FOUNDRY);
+		}
+		c.current().playedMs = 60 * MIN;
+		assertEquals(12, Goal.progress(c.current(), Goal.Kind.ROUNDS));
+		assertEquals("12 Giants' Foundry swords", Summary.of(c.current(), Summary.State.LIVE).headline());
+		Pace.Line pace = null;
+		for (Pace.Line line : Pace.of(c.current(), Collections.emptyList()))
+		{
+			if (line.getKind() == Pace.Kind.ROUNDS)
+			{
+				pace = line;
+			}
+		}
+		assertNotNull(pace);
+		assertEquals(12, pace.getRate());
+		assertEquals("swords", Summary.noun(pace.getName()));
+	}
+
+	@Test
+	public void lapsReadAsLaps()
+	{
+		Chronicle c = new Chronicle();
+		c.begin(0, "Zezima", GAP);
+		c.killCount("Seers' Village Rooftop lap", 100);
+		c.killCount("Seers' Village Rooftop lap", 147);
+		assertEquals("48 Seers' Village Rooftop laps", Summary.of(c.current(), Summary.State.LIVE).headline());
+		assertEquals("laps", Summary.noun("Seers' Village Rooftop lap"));
+	}
 }
