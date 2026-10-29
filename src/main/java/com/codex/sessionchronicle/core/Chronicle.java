@@ -569,6 +569,15 @@ public class Chronicle
 	 *
 	 * @param killer what they were fighting, or null
 	 */
+	/** Food, potions, runes or ammunition used, worth this many coins. */
+	public void used(long coins)
+	{
+		if (current != null && coins > 0)
+		{
+			current.supplies = Math.min(Saved.MAX_WORTH, current.getSupplies() + coins);
+		}
+	}
+
 	public void death(long now, String killer)
 	{
 		if (current == null)

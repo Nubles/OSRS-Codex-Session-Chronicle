@@ -41,6 +41,8 @@ public final class Summary
 	private final long playedMs;
 	private final long totalXp;
 	private final long lootValue;
+	private final long supplies;
+	private final int roundTotal;
 	private final int levels;
 	private final int kills;
 	private final int deaths;
@@ -76,6 +78,8 @@ public final class Summary
 		playedMs = s.playedMs;
 		totalXp = s.totalXp();
 		lootValue = s.lootValue();
+		supplies = s.getSupplies();
+		roundTotal = s.totalRounds();
 		levels = s.levelsGained();
 		kills = s.totalKills();
 		deaths = s.deaths;
@@ -186,7 +190,7 @@ public final class Summary
 		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
 			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player
 			+ "/" + (s.goal == null ? "-" : s.goal.getKind() + ":" + s.goal.getTarget() + ":" + s.goal.isReached())
-			+ "/" + s.pace.size() + "/" + s.presets.size();
+			+ "/" + s.pace.size() + "/" + s.presets.size() + "/" + s.supplies + "/" + s.roundTotal;
 	}
 
 	public State getState()
@@ -217,6 +221,18 @@ public final class Summary
 	public long getTotalXp()
 	{
 		return totalXp;
+	}
+
+	/** Coins' worth of food, potions, runes and ammunition used, or 0 when none was seen. */
+	public long getSupplies()
+	{
+		return supplies;
+	}
+
+	/** Loot less supplies used: what the session really made. */
+	public long getProfit()
+	{
+		return lootValue - supplies;
 	}
 
 	public long getLootValue()

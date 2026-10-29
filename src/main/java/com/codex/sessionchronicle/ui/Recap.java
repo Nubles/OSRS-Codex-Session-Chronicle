@@ -109,6 +109,12 @@ public final class Recap
 			out.append(line).append('\n');
 		}
 
+		if (s.getSupplies() > 0)
+		{
+			out.append("Supplies used: ").append(Format.coins(s.getSupplies())).append(", profit ")
+				.append(s.getProfit() < 0 ? "-" : "").append(Format.coins(Math.abs(s.getProfit()))).append('\n');
+		}
+
 		List<Session.KillLine> rounds = s.getRoundLines();
 		if (!rounds.isEmpty())
 		{

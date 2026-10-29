@@ -125,6 +125,10 @@ public class Session
 		endedAt = endedAt == 0 ? 0 : Math.max(endedAt, startedAt);
 		deaths = (int) Saved.clamp(deaths, MAX_KILLS);
 		otherLoot = Saved.clamp(otherLoot, Saved.MAX_WORTH);
+		if (supplies != null && (supplies <= 0 || supplies > Saved.MAX_WORTH))
+		{
+			supplies = null;
+		}
 		otherDrops = (int) Saved.clamp(otherDrops, Integer.MAX_VALUE);
 		tripCount = (int) Saved.clamp(tripCount, MAX_KILLS);
 		tripMs = Saved.clamp(tripMs, playedMs);
@@ -150,6 +154,8 @@ public class Session
 	Map<String, KillLine> kills = new LinkedHashMap<>();
 	List<Moment> moments = new ArrayList<>();
 	int deaths;
+	/** Coins' worth of food, potions, runes and ammunition used; null while none was, and in older saves. */
+	Long supplies;
 	/** Loot trimmed from the session when it was filed in the journal, so the totals still add up. */
 	long otherLoot;
 	int otherDrops;
@@ -301,6 +307,18 @@ public class Session
 		}
 		// However many lines a damaged save holds, no session has more, and the journal's sums stay whole.
 		return (int) Math.min(total, MAX_KILLS);
+	}
+
+	/** Coins' worth of food, potions, runes and ammunition used. */
+	public long getSupplies()
+	{
+		return supplies == null ? 0 : supplies;
+	}
+
+	/** Loot less the supplies used to get it. */
+	public long profit()
+	{
+		return lootValue() - getSupplies();
 	}
 
 	/** Laps and skilling minigame rounds, all lines together. */

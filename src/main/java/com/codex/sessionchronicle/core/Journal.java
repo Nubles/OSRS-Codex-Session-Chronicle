@@ -142,6 +142,7 @@ public final class Journal
 		c.playedMs = s.playedMs;
 		c.player = s.player;
 		c.deaths = s.deaths;
+		c.supplies = s.supplies;
 		c.goal = s.getGoal();
 		c.worthStart = s.worthStart;
 		c.worthNow = s.worthNow;
