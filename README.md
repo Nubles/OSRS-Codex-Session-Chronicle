@@ -58,6 +58,10 @@ A session begins when you log in. World hops never end it, and logging out and b
 
 Session Chronicle only reads what the game already shows you: your experience, loot events and the game's own chat messages. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
 
+## Field notes
+
+An optional setting, **Keep field notes** (under Field notes, off by default), writes a plain record of what Session Chronicle reads and decides to its own folder in `.runelite/plugin-data` on your computer, one line at a time. It is for checking the plugin's guesses against real play: when something looks wrong, the notes show what it saw and why it chose what it did. Other players' chat is never written down, it stays on your computer, and nothing is sent anywhere.
+
 ## Development
 
 ```bash
