@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle;
 
+import com.codex.sessionchronicle.notes.FieldNotes;
 import com.codex.sessionchronicle.core.Bosses;
 import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
@@ -177,6 +178,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Inject
 	private CodexSessionChronicleConfig config;
 
+	/** The optional local record of what the plugin read and decided. */
+	private FieldNotes notes;
+
 	private final Chronicle chronicle = new Chronicle();
 	private final SessionTicker ticker = new SessionTicker();
 
@@ -326,6 +330,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Override
 	protected void startUp()
 	{
+		notes = new FieldNotes(this::getPluginDirectory, gson);
+		if (config.fieldNotes())
+		{
+			notes.open();
+		}
 		ItemIcons items = (itemId, onLoaded) ->
 		{
 			AsyncBufferedImage image = itemManager.getImage(itemId);
@@ -424,6 +433,11 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		if (notes != null)
+		{
+			notes.shutdown();
+			notes = null;
+		}
 		runs.incrementAndGet();
 		if (expiry != null)
 		{
@@ -514,6 +528,18 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
+		if (CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) && "fieldNotes".equals(event.getKey()) && notes != null)
+		{
+			if (config.fieldNotes())
+			{
+				notes.open();
+			}
+			else
+			{
+				notes.close();
+			}
+			return;
+		}
 		if (LEDGER_GROUP.equals(event.getGroup()))
 		{
 			// Codex Ledger saved its book: the session's worth may have moved.
@@ -1076,6 +1102,19 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
+		if (notes != null && notes.isOpen())
+		{
+			net.runelite.api.ChatMessageType chatType = event.getType();
+			// Only the game's own lines: other players' chat is never written down.
+			if (chatType == net.runelite.api.ChatMessageType.GAMEMESSAGE || chatType == net.runelite.api.ChatMessageType.SPAM
+				|| chatType == net.runelite.api.ChatMessageType.MESBOX)
+			{
+				com.google.gson.JsonObject chatNote = new com.google.gson.JsonObject();
+				chatNote.addProperty("type", chatType.name());
+				chatNote.addProperty("text", event.getMessage());
+				notes.note("chat", chatNote);
+			}
+		}
 		if (!chronicle.isLive() || (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM))
 		{
 			return;
@@ -1248,6 +1287,22 @@ public class CodexSessionChroniclePlugin extends Plugin
 			snapshotProfile = profile;
 			copy = gson.fromJson(json, Session.class);
 			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED, journal);
+			if (notes.isOpen())
+			{
+				// The session's running tally, so a miscounted kill, trip or drop can be traced.
+				com.google.gson.JsonObject n = new com.google.gson.JsonObject();
+				n.addProperty("state", String.valueOf(live.getState()));
+				n.addProperty("startedAt", live.getStartedAt());
+				n.addProperty("playedMs", live.getPlayedMs());
+				n.addProperty("xp", live.getTotalXp());
+				n.addProperty("loot", live.getLootValue());
+				n.addProperty("supplies", live.getSupplies());
+				n.addProperty("kills", live.getKills());
+				n.addProperty("deaths", live.getDeaths());
+				n.addProperty("trips", live.getTripCount());
+				n.add("killLines", notes.safe(live.getKillLines()));
+				notes.noteChanged("session", n);
+			}
 			ticker.show(view(copy, System.currentTimeMillis(), chronicle.isLive()));
 		}
 		else
