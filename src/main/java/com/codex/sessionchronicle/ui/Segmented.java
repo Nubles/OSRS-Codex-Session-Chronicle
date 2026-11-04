@@ -93,8 +93,48 @@ public class Segmented extends JComponent
 
 	private int indexAt(int x)
 	{
-		int w = Math.max(1, getWidth());
-		return Math.max(0, Math.min(labels.length - 1, x * labels.length / w));
+		float[] edges = edges(getWidth());
+		for (int i = 0; i < labels.length; i++)
+		{
+			if (x < edges[i + 1])
+			{
+				return i;
+			}
+		}
+		return labels.length - 1;
+	}
+
+	/**
+	 * Where each segment begins, and the last one ends. A small strip splits evenly; the large tab strip
+	 * gives each tab its label's width and shares out the rest, so four tabs in the game's bold font
+	 * still fit the side panel without crowding.
+	 */
+	private float[] edges(int w)
+	{
+		float[] edges = new float[labels.length + 1];
+		FontMetrics fm = large ? getFontMetrics(getFont()) : null;
+		float text = 0;
+		if (fm != null)
+		{
+			for (String label : labels)
+			{
+				text += fm.stringWidth(label);
+			}
+		}
+		float spare = (w - text) / labels.length;
+		if (fm == null || spare < 4)
+		{
+			for (int i = 0; i <= labels.length; i++)
+			{
+				edges[i] = w * i / (float) labels.length;
+			}
+			return edges;
+		}
+		for (int i = 0; i < labels.length; i++)
+		{
+			edges[i + 1] = edges[i] + fm.stringWidth(labels[i]) + spare;
+		}
+		return edges;
 	}
 
 	@Override
@@ -104,13 +144,19 @@ public class Segmented extends JComponent
 		Theme.smooth(g);
 		int w = getWidth();
 		int h = getHeight();
-		float seg = w / (float) labels.length;
+		float[] edges = edges(w);
 
 		RoundRectangle2D strip = new RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, 8, 8);
 		g.setColor(Theme.INK_DEEP);
 		g.fill(strip);
 
-		float x = (float) (slide.get() * seg);
+		// The lit segment slides between tabs; its width eases from one tab's to the next's.
+		double at = Math.max(0, Math.min(labels.length - 1, slide.get()));
+		int from = (int) Math.floor(at);
+		int to = Math.min(labels.length - 1, from + 1);
+		float t = (float) (at - from);
+		float x = edges[from] + (edges[to] - edges[from]) * t;
+		float seg = (edges[from + 1] - edges[from]) * (1 - t) + (edges[to + 1] - edges[to]) * t;
 		RoundRectangle2D lit = new RoundRectangle2D.Float(x + 2, 2, seg - 4, h - 4, 6, 6);
 		g.setPaint(new GradientPaint(0, 2, Theme.CARD_TOP, 0, h, Theme.mix(Theme.CARD_TOP, Theme.GOLD_DIM, 0.35)));
 		g.fill(lit);
@@ -123,7 +169,7 @@ public class Segmented extends JComponent
 		FontMetrics fm = g.getFontMetrics();
 		for (int i = 0; i < labels.length; i++)
 		{
-			int tx = Math.round(i * seg + (seg - fm.stringWidth(labels[i])) / 2);
+			int tx = Math.round(edges[i] + (edges[i + 1] - edges[i] - fm.stringWidth(labels[i])) / 2);
 			int ty = (h + fm.getAscent()) / 2 - (large ? 2 : 1);
 			java.awt.Color color = i == selected ? Theme.GOLD_BRIGHT : i == hover ? Theme.TEXT : Theme.TEXT_MUTED;
 			Ui.shadowed(g, labels[i], tx, ty, color);

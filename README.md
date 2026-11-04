@@ -23,6 +23,7 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 - **Moments.** Levels, pets, new collection log slots, valuable drops, quests, diaries, clue scrolls, personal bests and deaths, each with its time. Personal records (your fastest Mining yet, your quickest Vorkath trip, your richest session) become moments when a session ends.
 - **Journal.** The day so far, then every finished session, newest first, with your records and your activities.
 - **Cards.** The session, or the last seven days, as a picture to save or copy, or as text to paste into a chat.
+- **Rooftop coach.** The Agility tab times every rooftop lap in game ticks, start to start, and keeps your best lap on each course as a ghost: the lap under way is set against it obstacle by obstacle ("1.8s behind at obstacle 3", "on pace for 44.4s"). Each course you run keeps its laps, best and usual lap, the recent laps as a little chart, experience an hour and the marks of grace you actually found. A Graceful card shows the pieces you own (seen in your bank, worn or carried), the marks you have, the marks still to find and about how long that takes at your pace. *Best for you now* ranks every course you can run by experience an hour, from your own laps once you have five on a course and the wiki's rates before that, each labelled, with marks an hour beside it, including the 80% cut 20 levels over a course. Your best laps become session moments. Turn on *Lap plaque* for the lap and its gap in the game view. Obstacles are not highlighted here, since RuneLite's own Agility plugin already does that.
 - **Ticker.** An optional slim plaque in the game view with the session's clock, experience and loot.
 
 <p align="center">
@@ -36,6 +37,10 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
   <img src="docs/screenshots/ghost.png" width="225" alt="Ghost pace on the Session tab">
   <img src="docs/screenshots/ghost-plaque.png" width="300" alt="The ghost plaque">
 </p>
+<p align="center">
+  <img src="docs/screenshots/agility.png" width="225" alt="The rooftop coach on the Agility tab">
+  <img src="docs/screenshots/lap-plaque.png" width="260" alt="The lap plaque">
+</p>
 
 ## Settings that matter
 
@@ -47,6 +52,8 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 | Session ticker | The plaque in the game view. Off by default. |
 | Ghost pace | Races the session against your best earlier session of the same activity on the Session tab. On by default. |
 | Ghost plaque | The same race in a slim plaque in the game view. Off by default. |
+| Rooftop coach | Times rooftop laps, races your best lap, counts marks of grace toward Graceful and compares courses on the Agility tab. On by default. |
+| Lap plaque | The lap under way and its gap to your best lap in a slim plaque in the game view. Off by default. |
 | Recap last session, Goal reached in chat | Lines in the chat box when a new session begins and when the session's goal is reached. |
 | Name on cards | Writes your character's name on the cards and their text. On by default. |
 | Worth on cards | Shows how your net worth moved, by Codex Ledger, on the week card. Off by default. |
@@ -63,7 +70,7 @@ A session begins when you log in. World hops never end it, and logging out and b
 
 ## Rules posture
 
-Session Chronicle only reads what the game already shows you: your experience, loot events and the game's own chat messages. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
+Session Chronicle only reads what the game already shows you: your experience, loot events, the game's own chat messages and the items in your bank, inventory and worn equipment. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
 
 ## Development
 

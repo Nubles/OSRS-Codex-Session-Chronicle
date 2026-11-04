@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.AgilityCoach;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Summary;
@@ -23,18 +24,18 @@ import net.runelite.client.ui.PluginPanel;
 /**
  * The Session Chronicle side panel: the crest, then three pages. Session is the session being
  * lived (or one opened from the journal), Journal is every session kept with its records, and
- * Card is the session as a picture to save or copy.
+ * Card is the session as a picture to save or copy, and Agility is the rooftop coach.
  */
 public class ChroniclePanel extends PluginPanel
 {
-	private static final String[] TABS = {"session", "journal", "card"};
+	private static final String[] TABS = {"session", "journal", "card", "agility"};
 
 	private final ItemIcons items;
 	private final Icons icons;
 	private final CardActions actions;
 	private final SessionActions sessionActions;
 	private final Crest crest = new Crest();
-	private final Segmented tabs = new Segmented(true, "Session", "Journal", "Card");
+	private final Segmented tabs = new Segmented(true, "Session", "Journal", "Card", "Agility");
 	private final Segmented metrics = new Segmented(false, JournalView.METRICS);
 	private final Segmented goalKinds = new Segmented(false, GoalView.KINDS);
 	/** Which card the Card tab shows: the session's, or the week's. */
@@ -44,6 +45,11 @@ public class ChroniclePanel extends PluginPanel
 	private final JScrollPane session = scroller();
 	private final JScrollPane journal = scroller();
 	private final JScrollPane card = scroller();
+	private final JScrollPane agility = scroller();
+	/** The rooftop coach as last sent, or null before the first; see {@link #updateAgility}. */
+	private AgilityCoach coach;
+	private boolean agilityOff;
+	private boolean agilityStale = true;
 
 	private Summary live;
 	private List<Summary> past = Collections.emptyList();
@@ -88,6 +94,7 @@ public class ChroniclePanel extends PluginPanel
 		content.add(session, TABS[0]);
 		content.add(journal, TABS[1]);
 		content.add(card, TABS[2]);
+		content.add(agility, TABS[3]);
 		add(content, BorderLayout.CENTER);
 
 		tabs.onChange(this::showTab);
@@ -163,6 +170,10 @@ public class ChroniclePanel extends PluginPanel
 		{
 			refresh(true);
 		}
+		else if (tab == 3 && agilityStale)
+		{
+			rebuildAgility();
+		}
 	}
 
 	private void refresh(boolean journalChanged)
@@ -185,6 +196,10 @@ public class ChroniclePanel extends PluginPanel
 		if (tab == 2)
 		{
 			rebuildCard(false);
+		}
+		if (tab == 3 && agilityStale)
+		{
+			rebuildAgility();
 		}
 	}
 
@@ -253,6 +268,41 @@ public class ChroniclePanel extends PluginPanel
 			cardNote = null;
 			rebuildCard(true);
 		}
+		if (index == 3)
+		{
+			rebuildAgility();
+		}
+	}
+
+	/**
+	 * The rooftop coach, sent on the Swing thread whenever a lap, a mark or the outfit moves, and every
+	 * few ticks while a lap is being timed. It is drawn only while the Agility tab is open.
+	 *
+	 * @param off true when the coach is turned off in the settings
+	 */
+	public void updateAgility(AgilityCoach coach, boolean off)
+	{
+		this.coach = coach;
+		this.agilityOff = off;
+		agilityStale = true;
+		if (tab == 3 && isShowing())
+		{
+			rebuildAgility();
+		}
+	}
+
+	private void rebuildAgility()
+	{
+		agilityStale = false;
+		if (agilityOff)
+		{
+			StackPanel stack = new StackPanel(8, 8);
+			stack.add(SessionView.note("The rooftop coach is off", "Turn on Rooftop coach in Session Chronicle's settings to time your laps, "
+				+ "race your best one and count marks of grace toward Graceful."));
+			replace(agility, stack);
+			return;
+		}
+		replace(agility, AgilityView.build(coach, items));
 	}
 
 	/** Shows the session's card (0) or the week's (1) on the Card tab, for previews and tests. */
