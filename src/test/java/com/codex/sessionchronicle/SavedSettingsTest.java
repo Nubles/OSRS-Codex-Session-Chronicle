@@ -14,7 +14,7 @@ public class SavedSettingsTest
 	private static final String[] ON_MAIN = {"breakMinutes", "chatRecap", "journalSize", "nameOnCard", "showTicker", "valuableDrop"};
 	/** Keys added since, which players will have saved by the time this ships. */
 	private static final String[] ADDED = {"goalChat", "worthOnCard", "ghostPace", "ghostPlaque", "agilityCoach", "lapPlaque",
-		"benchProgress", "benchPlaque"};
+		"benchProgress", "benchPlaque", "underwaterLog", "underwaterGoal", "divePlaque"};
 
 	@Test
 	public void savedSettingsKeepTheirKeys()

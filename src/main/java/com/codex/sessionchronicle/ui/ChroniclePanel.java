@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.ui;
 
 import com.codex.sessionchronicle.core.AgilityCoach;
+import com.codex.sessionchronicle.core.UnderwaterCoach;
 import com.codex.sessionchronicle.core.Bench;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.Pace;
@@ -25,7 +26,7 @@ import net.runelite.client.ui.PluginPanel;
 /**
  * The Session Chronicle side panel: the crest, then three pages. Session is the session being
  * lived (or one opened from the journal), Journal is every session kept with its records, and
- * Card is the session as a picture to save or copy, and Agility is the rooftop coach.
+ * Card is the session as a picture to save or copy, and Agility is the rooftop coach and the underwater log.
  */
 public class ChroniclePanel extends PluginPanel
 {
@@ -51,6 +52,9 @@ public class ChroniclePanel extends PluginPanel
 	private AgilityCoach coach;
 	private boolean agilityOff;
 	private boolean agilityStale = true;
+	/** Underwater Agility and Thieving as last sent, or null; see {@link #updateUnderwater}. */
+	private UnderwaterCoach underwater;
+	private boolean underwaterOff = true;
 
 	private Summary live;
 	/** The make-X batch under way, shown on the live Session tab; null for none. */
@@ -307,18 +311,47 @@ public class ChroniclePanel extends PluginPanel
 		}
 	}
 
+	/**
+	 * Underwater Agility and Thieving, sent on the Swing thread whenever a dive, the tears carried or a
+	 * hand-in moves, and every few ticks while a dive is under way. It shares the Agility tab.
+	 *
+	 * @param off true when the underwater log is turned off in the settings
+	 */
+	public void updateUnderwater(UnderwaterCoach underwater, boolean off)
+	{
+		this.underwater = underwater;
+		this.underwaterOff = off;
+		agilityStale = true;
+		if (tab == 3 && isShowing())
+		{
+			rebuildAgility();
+		}
+	}
+
 	private void rebuildAgility()
 	{
 		agilityStale = false;
+		StackPanel stack = new StackPanel(8, 8);
+		boolean diving = !underwaterOff && underwater != null && (underwater.getLive() != null || underwater.isUnderwater());
+		if (diving)
+		{
+			// The dive under way comes first; the rooftops wait below.
+			UnderwaterView.addTo(stack, underwater, items);
+		}
 		if (agilityOff)
 		{
-			StackPanel stack = new StackPanel(8, 8);
 			stack.add(SessionView.note("The rooftop coach is off", "Turn on Rooftop coach in Session Chronicle's settings to time your laps, "
 				+ "race your best one and count marks of grace toward Graceful."));
-			replace(agility, stack);
-			return;
 		}
-		replace(agility, AgilityView.build(coach, items));
+		else
+		{
+			AgilityView.addTo(stack, coach, items);
+		}
+		if (!diving && !underwaterOff)
+		{
+			UnderwaterView.addTo(stack, underwater, items);
+		}
+		replace(agility, stack);
 	}
 
 	/** Shows the session's card (0) or the week's (1) on the Card tab, for previews and tests. */

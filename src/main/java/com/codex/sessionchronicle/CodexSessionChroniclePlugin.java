@@ -6,6 +6,7 @@ import com.codex.sessionchronicle.core.Bench;
 import com.codex.sessionchronicle.core.BenchLog;
 import com.codex.sessionchronicle.core.Bosses;
 import com.codex.sessionchronicle.core.ChatParser;
+import com.codex.sessionchronicle.core.DiveWatch;
 import com.codex.sessionchronicle.core.Chronicle;
 import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Graceful;
@@ -20,8 +21,12 @@ import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
+import com.codex.sessionchronicle.core.Underwater;
+import com.codex.sessionchronicle.core.UnderwaterCoach;
+import com.codex.sessionchronicle.core.UnderwaterLog;
 import com.codex.sessionchronicle.core.Week;
 import com.codex.sessionchronicle.overlay.BenchPlaque;
+import com.codex.sessionchronicle.overlay.DivePlaque;
 import com.codex.sessionchronicle.overlay.GhostPlaque;
 import com.codex.sessionchronicle.overlay.LapPlaque;
 import com.codex.sessionchronicle.overlay.SessionTicker;
@@ -80,6 +85,8 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.MenuAction;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.EnumID;
 import net.runelite.api.events.StatChanged;
@@ -134,6 +141,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	static final String AGILITY_KEY = "agility";
 	/** The account's make-X actions, their pace and the bank's supplies for them; see BenchLog. */
 	static final String BENCH_KEY = "bench";
+	/** The underwater log of dives, tears and hand-ins, per account; see UnderwaterLog. */
+	static final String UNDERWATER_KEY = "underwater";
 	/** Skills whose experience comes from fighting: an item used up beside it (a potion drunk) is no make-X action. */
 	private static final Set<Skill> FIGHTING = java.util.EnumSet.of(Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED,
 		Skill.MAGIC, Skill.HITPOINTS, Skill.PRAYER, Skill.SLAYER);
@@ -236,6 +245,15 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private int xpTick = -10;
 	/** The tick food or a potion was last eaten or drunk: the pack's change then is no make-X action. */
 	private int ateTick = -10;
+
+	/** The optional plaque with the dive under way. */
+	private final DivePlaque divePlaque = new DivePlaque();
+	/** Dives at Fossil Island's Underwater Agility and Thieving, read tick by tick. */
+	private final DiveWatch diveWatch = new DiveWatch();
+	/** The account's dives, hand-ins and banked tears. */
+	private UnderwaterLog underwaterLog = new UnderwaterLog();
+	private boolean underwaterDirty;
+	private boolean underwaterSave;
 
 	/** Hands each item picture's load callback over only until it arrives. */
 	private final IconWatch iconWatch = new IconWatch();
@@ -475,6 +493,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		overlayManager.add(lapPlaque);
 		benchPlaque.setEnabled(config.benchProgress() && config.benchPlaque());
 		overlayManager.add(benchPlaque);
+		divePlaque.setEnabled(config.underwaterLog() && config.divePlaque());
+		overlayManager.add(divePlaque);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
 		scheduleMidnight(runs.incrementAndGet());
 		clientThread.invokeLater(() ->
@@ -505,10 +525,13 @@ public class CodexSessionChroniclePlugin extends Plugin
 		overlayManager.remove(ghostPlaque);
 		overlayManager.remove(lapPlaque);
 		overlayManager.remove(benchPlaque);
+		overlayManager.remove(divePlaque);
 		clientToolbar.removeNavigation(navButton);
 		clientThread.invokeLater(() ->
 		{
 			chronicle.pause(System.currentTimeMillis());
+			// The dive under way is filed while the account's profile is still known.
+			endDive(System.currentTimeMillis());
 			saveCurrent();
 			chronicle.restore(null);
 			profile = null;
@@ -520,6 +543,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			storeBench();
 			benchLog = new BenchLog();
 			resetBench();
+			underwaterLog = new UnderwaterLog();
 			pendingBegin = false;
 			snapshot = null;
 			ledgerBook = null;
@@ -541,6 +565,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			supplies.reset();
 			resetAgility();
 			resetBench();
+			endDive(System.currentTimeMillis());
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -559,6 +584,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			resetAgility();
 			storeBench();
 			resetBench();
+			endDive(System.currentTimeMillis());
 			busy.clear();
 			if (chronicle.isLive())
 			{
@@ -579,6 +605,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		resetAgility();
 		storeBench();
 		resetBench();
+		endDive(System.currentTimeMillis());
 		loadProfile();
 		pendingBegin = client.getGameState() == GameState.LOGGED_IN;
 		publish();
@@ -614,8 +641,23 @@ public class CodexSessionChroniclePlugin extends Plugin
 			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())
 			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())
 			&& !"agilityCoach".equals(event.getKey()) && !"lapPlaque".equals(event.getKey())
-			&& !"benchProgress".equals(event.getKey()) && !"benchPlaque".equals(event.getKey())))
+			&& !"benchProgress".equals(event.getKey()) && !"benchPlaque".equals(event.getKey())
+			&& !"underwaterLog".equals(event.getKey()) && !"underwaterGoal".equals(event.getKey()) && !"divePlaque".equals(event.getKey())))
 		{
+			return;
+		}
+		if ("underwaterLog".equals(event.getKey()) || "underwaterGoal".equals(event.getKey()) || "divePlaque".equals(event.getKey()))
+		{
+			divePlaque.setEnabled(config.underwaterLog() && config.divePlaque());
+			clientThread.invokeLater(() ->
+			{
+				if (!config.underwaterLog())
+				{
+					endDive(System.currentTimeMillis());
+					divePlaque.show(null);
+				}
+				publishUnderwater();
+			});
 			return;
 		}
 		if ("benchProgress".equals(event.getKey()) || "benchPlaque".equals(event.getKey()))
@@ -675,6 +717,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		}
 		tickAgility(now);
 		tickBench(now);
+		tickUnderwater(now);
 		if (!chronicle.isLive())
 		{
 			return;
@@ -1021,6 +1064,18 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			supplies.quiet(client.getTickCount());
 		}
+		if (config.underwaterLog() && isObjectAction(event.getMenuAction()))
+		{
+			// Only which kind of object was searched is kept, to name the next search a clam or a chest.
+			diveWatch.clicked(Underwater.Spot.of(event.getId()), client.getTickCount());
+		}
+	}
+
+	private static boolean isObjectAction(MenuAction action)
+	{
+		return action == MenuAction.GAME_OBJECT_FIRST_OPTION || action == MenuAction.GAME_OBJECT_SECOND_OPTION
+			|| action == MenuAction.GAME_OBJECT_THIRD_OPTION || action == MenuAction.GAME_OBJECT_FOURTH_OPTION
+			|| action == MenuAction.GAME_OBJECT_FIFTH_OPTION;
 	}
 
 	/** What is carried (inventory, worn items, rune pouch), priced against the last tick's. */
@@ -1294,6 +1349,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 		agilityDirty = true;
 		benchLog = profile == null ? new BenchLog()
 			: BenchLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, BENCH_KEY));
+		underwaterLog = profile == null ? new UnderwaterLog()
+			: UnderwaterLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, UNDERWATER_KEY));
+		underwaterDirty = true;
 		journal = Collections.emptyList();
 		pastSummaries = Collections.emptyList();
 		chronicle.restore(null);
@@ -1449,6 +1507,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			publishAgility();
 		}
+		if (underwaterDirty)
+		{
+			publishUnderwater();
+		}
 	}
 
 	/** Forgets the lap under way and the readings that must be taken afresh: after a hop, a logout or a new account. */
@@ -1549,6 +1611,22 @@ public class CodexSessionChroniclePlugin extends Plugin
 			Map<Integer, Integer> banked = new HashMap<>();
 			add(banked, event.getItemContainer());
 			benchSave |= bench.sawBank(banked, System.currentTimeMillis(), benchLog);
+		}
+		if (event.getContainerId() == InventoryID.BANK && event.getItemContainer() != null && config.underwaterLog() && profile != null)
+		{
+			int tears = 0;
+			for (Item item : event.getItemContainer().getItems())
+			{
+				if (item != null && Underwater.isMermaidTear(item.getId()))
+				{
+					tears += item.getQuantity();
+				}
+			}
+			if (underwaterLog.bankTears(tears))
+			{
+				underwaterSave = true;
+				underwaterDirty = true;
+			}
 		}
 		if (!config.agilityCoach())
 		{
@@ -1667,6 +1745,153 @@ public class CodexSessionChroniclePlugin extends Plugin
 			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, BENCH_KEY, gson.toJson(benchLog));
 		}
 		benchSave = false;
+	}
+
+	/**
+	 * Each tick: reads the tears carried, Agility and Thieving experience and whether the player is
+	 * underwater, files a dive or a hand-in to Mairin that ended, and sends the dive to the panel and
+	 * the plaque. Nothing in the game view is marked.
+	 */
+	private void tickUnderwater(long now)
+	{
+		if (!config.underwaterLog() || client.getGameState() != GameState.LOGGED_IN || profile == null)
+		{
+			return;
+		}
+		int tick = client.getTickCount();
+		int mermaid = 0;
+		int glistening = 0;
+		ItemContainer inv = client.getItemContainer(InventoryID.INV);
+		if (inv == null)
+		{
+			mermaid = -1;
+			glistening = -1;
+		}
+		else
+		{
+			for (Item item : inv.getItems())
+			{
+				if (item == null)
+				{
+					continue;
+				}
+				if (Underwater.isMermaidTear(item.getId()))
+				{
+					mermaid += item.getQuantity();
+				}
+				else if (Underwater.isGlisteningTear(item.getId()))
+				{
+					glistening += item.getQuantity();
+				}
+			}
+		}
+		boolean bank = busy.contains(InterfaceID.BANKMAIN) || busy.contains(InterfaceID.BANK_DEPOSITBOX);
+		DiveWatch.Step step = diveWatch.tick(tick, now, new DiveWatch.Reading(isUnderwater(), busy.contains(InterfaceID.SHOPMAIN), bank,
+			mermaid, glistening, client.getSkillExperience(Skill.AGILITY), client.getSkillExperience(Skill.THIEVING)));
+		if (step.getHandIn() != null)
+		{
+			DiveWatch.HandIn h = step.getHandIn();
+			underwaterLog.handIn(h.getTears(), h.getAgilityXp(), h.getThievingXp());
+			underwaterSave = true;
+		}
+		if (step.getFiled() != null)
+		{
+			fileDive(step.getFiled(), now);
+		}
+		if (underwaterLog.levels(client.getRealSkillLevel(Skill.AGILITY), client.getRealSkillLevel(Skill.THIEVING)))
+		{
+			underwaterSave = true;
+			underwaterDirty = true;
+		}
+		underwaterDirty |= step.isChanged() || diveWatch.isDiving() && tick % 5 == 0;
+		if (diveWatch.isDiving())
+		{
+			divePlaque.show(coach(underwaterLog));
+		}
+		else
+		{
+			divePlaque.show(null);
+		}
+		if (underwaterSave && (!diveWatch.isDiving() || step.getHandIn() != null))
+		{
+			storeUnderwater();
+		}
+		if (underwaterDirty)
+		{
+			publishUnderwater();
+		}
+	}
+
+	/** Whether the player is under the sea off Fossil Island: in its map regions, or with the oxygen bar up. */
+	private boolean isUnderwater()
+	{
+		Player player = client.getLocalPlayer();
+		if (player != null && Underwater.isRegion(player.getWorldLocation().getRegionID()))
+		{
+			return true;
+		}
+		Widget oxygen = client.getWidget(InterfaceID.FossilUnderwater.OXYGEN_LAYER);
+		return oxygen != null && !oxygen.isHidden();
+	}
+
+	/** Ends the dive under way, if any, and files it: after a hop, a logout, a new account or the log turned off. */
+	private void endDive(long now)
+	{
+		UnderwaterLog.Dive d = diveWatch.reset();
+		divePlaque.show(null);
+		if (d != null)
+		{
+			fileDive(d, now);
+		}
+		if (underwaterSave)
+		{
+			storeUnderwater();
+		}
+		underwaterDirty = true;
+	}
+
+	private void fileDive(UnderwaterLog.Dive d, long now)
+	{
+		if (underwaterLog.file(d) && chronicle.isLive())
+		{
+			chronicle.moment(new Moment(Moment.Kind.BEST, now, "Dive at " + Math.round(d.tearsPerHour()) + " tears an hour",
+				"New best underwater dive", ItemID.FOSSIL_MERMAID_TEAR, 0));
+			dirty = true;
+			saveSoon = true;
+		}
+		underwaterSave = true;
+		underwaterDirty = true;
+	}
+
+	private void storeUnderwater()
+	{
+		if (underwaterSave && profile != null)
+		{
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, UNDERWATER_KEY, gson.toJson(underwaterLog));
+		}
+		underwaterSave = false;
+	}
+
+	/** The underwater coach from a log, with the dive under way and what is carried now. */
+	private UnderwaterCoach coach(UnderwaterLog log)
+	{
+		boolean in = client.getGameState() == GameState.LOGGED_IN;
+		return UnderwaterCoach.of(log, diveWatch.current(), diveWatch.isUnderwater(), diveWatch.getMermaid(), diveWatch.getGlistening(),
+			in ? client.getRealSkillLevel(Skill.AGILITY) : 0, in ? client.getRealSkillLevel(Skill.THIEVING) : 0, config.underwaterGoal());
+	}
+
+	/** Sends the panel the underwater log, worked out here from a copy, so Swing never reads what the client thread writes. */
+	private void publishUnderwater()
+	{
+		underwaterDirty = false;
+		ChroniclePanel target = panel;
+		if (target == null)
+		{
+			return;
+		}
+		boolean off = !config.underwaterLog();
+		UnderwaterCoach shown = off || profile == null ? null : coach(underwaterLog.copy(gson));
+		SwingUtilities.invokeLater(() -> target.updateUnderwater(shown, off));
 	}
 
 	private void storeAgility()
