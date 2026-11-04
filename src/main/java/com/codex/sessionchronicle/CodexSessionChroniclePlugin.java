@@ -18,6 +18,10 @@ import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Rooftop;
 import com.codex.sessionchronicle.core.Saved;
 import com.codex.sessionchronicle.core.Session;
+import com.codex.sessionchronicle.core.RandomEvents;
+import com.codex.sessionchronicle.core.RandomLog;
+import com.codex.sessionchronicle.core.RandomReport;
+import com.codex.sessionchronicle.core.RandomWatch;
 import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
@@ -69,6 +73,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.EquipmentInventorySlot;
+import net.runelite.api.Constants;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
@@ -82,6 +87,8 @@ import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.InteractingChanged;
+import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.events.MenuOptionClicked;
@@ -143,6 +150,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	static final String BENCH_KEY = "bench";
 	/** The underwater log of dives, tears and hand-ins, per account; see UnderwaterLog. */
 	static final String UNDERWATER_KEY = "underwater";
+	/** The random events met, per account; see RandomLog. */
+	static final String RANDOM_KEY = "randomEvents";
+	/** Ticks of experience before an event that say what the player was doing (two minutes). */
+	private static final int ACTIVITY_TICKS = 200;
 	/** Skills whose experience comes from fighting: an item used up beside it (a potion drunk) is no make-X action. */
 	private static final Set<Skill> FIGHTING = java.util.EnumSet.of(Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED,
 		Skill.MAGIC, Skill.HITPOINTS, Skill.PRAYER, Skill.SLAYER);
@@ -254,6 +265,18 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private UnderwaterLog underwaterLog = new UnderwaterLog();
 	private boolean underwaterDirty;
 	private boolean underwaterSave;
+
+	/** The random event under way, followed from its NPC turning to the player to its end. */
+	private final RandomWatch randomWatch = new RandomWatch();
+	/** The account's random events, their totals and the costume pieces seen. */
+	private RandomLog randomLog = new RandomLog();
+	private boolean randomDirty;
+	private boolean randomSave;
+	/** Experience gained lately, tick and skill and amount, to say what the player was doing when an event came. */
+	private final java.util.ArrayDeque<Object[]> recentXp = new java.util.ArrayDeque<>();
+	/** The monster the player last fought, and when. */
+	private String fightName;
+	private int fightTick = -1000;
 
 	/** Hands each item picture's load callback over only until it arrives. */
 	private final IconWatch iconWatch = new IconWatch();
@@ -532,6 +555,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			chronicle.pause(System.currentTimeMillis());
 			// The dive under way is filed while the account's profile is still known.
 			endDive(System.currentTimeMillis());
+			endRandom();
 			saveCurrent();
 			chronicle.restore(null);
 			profile = null;
@@ -544,6 +568,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			benchLog = new BenchLog();
 			resetBench();
 			underwaterLog = new UnderwaterLog();
+			randomLog = new RandomLog();
 			pendingBegin = false;
 			snapshot = null;
 			ledgerBook = null;
@@ -566,6 +591,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			resetAgility();
 			resetBench();
 			endDive(System.currentTimeMillis());
+			endRandom();
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -585,6 +611,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			storeBench();
 			resetBench();
 			endDive(System.currentTimeMillis());
+			endRandom();
 			busy.clear();
 			if (chronicle.isLive())
 			{
@@ -606,6 +633,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		storeBench();
 		resetBench();
 		endDive(System.currentTimeMillis());
+		endRandom();
 		loadProfile();
 		pendingBegin = client.getGameState() == GameState.LOGGED_IN;
 		publish();
@@ -642,8 +670,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())
 			&& !"agilityCoach".equals(event.getKey()) && !"lapPlaque".equals(event.getKey())
 			&& !"benchProgress".equals(event.getKey()) && !"benchPlaque".equals(event.getKey())
-			&& !"underwaterLog".equals(event.getKey()) && !"underwaterGoal".equals(event.getKey()) && !"divePlaque".equals(event.getKey())))
+			&& !"underwaterLog".equals(event.getKey()) && !"underwaterGoal".equals(event.getKey()) && !"divePlaque".equals(event.getKey())
+			&& !"randomEvents".equals(event.getKey())))
 		{
+			return;
+		}
+		if ("randomEvents".equals(event.getKey()))
+		{
+			clientThread.invokeLater(() ->
+			{
+				if (!config.randomEvents())
+				{
+					endRandom();
+				}
+				publishRandom();
+			});
 			return;
 		}
 		if ("underwaterLog".equals(event.getKey()) || "underwaterGoal".equals(event.getKey()) || "divePlaque".equals(event.getKey()))
@@ -718,6 +759,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		tickAgility(now);
 		tickBench(now);
 		tickUnderwater(now);
+		tickRandom(now);
 		if (!chronicle.isLive())
 		{
 			return;
@@ -1022,6 +1064,14 @@ public class CodexSessionChroniclePlugin extends Plugin
 			agilityXp(event.getXp());
 		}
 		Integer was = skillXp.put(event.getSkill(), event.getXp());
+		if (was != null && event.getXp() > was)
+		{
+			recentXp.addLast(new Object[]{client.getTickCount(), event.getSkill(), event.getXp() - was});
+			while (recentXp.size() > 400)
+			{
+				recentXp.removeFirst();
+			}
+		}
 		if (was != null && event.getXp() > was && !FIGHTING.contains(event.getSkill()))
 		{
 			xpSkill = event.getSkill().getName();
@@ -1068,6 +1118,45 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			// Only which kind of object was searched is kept, to name the next search a clam or a chest.
 			diveWatch.clicked(Underwater.Spot.of(event.getId()), client.getTickCount());
+		}
+		NPC npc = event.getMenuEntry() == null ? null : event.getMenuEntry().getNpc();
+		RandomEvents.Event randomEvent = npc == null ? null : RandomEvents.Event.ofNpc(npc.getId());
+		if (config.randomEvents() && profile != null && randomEvent != null)
+		{
+			// Only the player's own answer to an event is read: Talk-to or Pick takes part, Dismiss sends it away.
+			Player me = client.getLocalPlayer();
+			RandomWatch.Spot spot = me == null ? null : spot(me);
+			fileRandom(randomWatch.clicked(randomEvent, npc.getIndex(), option, client.getTickCount(), System.currentTimeMillis(),
+				activity(), spot, pack()));
+		}
+	}
+
+	/** An event NPC turned to the player, and the player is not the one facing it: their own random event. */
+	@Subscribe
+	public void onInteractingChanged(InteractingChanged event)
+	{
+		Actor source = event.getSource();
+		Player me = client.getLocalPlayer();
+		if (!config.randomEvents() || profile == null || me == null || event.getTarget() != me || me.getInteracting() == source
+			|| !(source instanceof NPC))
+		{
+			return;
+		}
+		RandomEvents.Event e = RandomEvents.Event.ofNpc(((NPC) source).getId());
+		if (e == null || e == RandomEvents.Event.STRANGE_PLANT)
+		{
+			return;
+		}
+		fileRandom(randomWatch.spawned(e, ((NPC) source).getIndex(), client.getTickCount(), System.currentTimeMillis(), activity()));
+		randomDirty = true;
+	}
+
+	@Subscribe
+	public void onNpcDespawned(NpcDespawned event)
+	{
+		if (randomWatch.isOpen())
+		{
+			randomWatch.despawned(event.getNpc().getIndex(), client.getTickCount());
 		}
 	}
 
@@ -1352,6 +1441,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 		underwaterLog = profile == null ? new UnderwaterLog()
 			: UnderwaterLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, UNDERWATER_KEY));
 		underwaterDirty = true;
+		randomLog = profile == null ? new RandomLog()
+			: RandomLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, RANDOM_KEY));
+		randomDirty = true;
 		journal = Collections.emptyList();
 		pastSummaries = Collections.emptyList();
 		chronicle.restore(null);
@@ -1511,6 +1603,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			publishUnderwater();
 		}
+		if (randomDirty)
+		{
+			publishRandom();
+		}
 	}
 
 	/** Forgets the lap under way and the readings that must be taken afresh: after a hop, a logout or a new account. */
@@ -1611,6 +1707,23 @@ public class CodexSessionChroniclePlugin extends Plugin
 			Map<Integer, Integer> banked = new HashMap<>();
 			add(banked, event.getItemContainer());
 			benchSave |= bench.sawBank(banked, System.currentTimeMillis(), benchLog);
+		}
+		if ((event.getContainerId() == InventoryID.INV || event.getContainerId() == InventoryID.WORN || event.getContainerId() == InventoryID.BANK)
+			&& event.getItemContainer() != null && config.randomEvents() && profile != null)
+		{
+			List<Integer> held = new ArrayList<>();
+			for (Item item : event.getItemContainer().getItems())
+			{
+				if (item != null && item.getId() > 0)
+				{
+					held.add(item.getId());
+				}
+			}
+			if (randomLog.sawPieces(held))
+			{
+				randomSave = true;
+				randomDirty = true;
+			}
 		}
 		if (event.getContainerId() == InventoryID.BANK && event.getItemContainer() != null && config.underwaterLog() && profile != null)
 		{
@@ -1892,6 +2005,157 @@ public class CodexSessionChroniclePlugin extends Plugin
 		boolean off = !config.underwaterLog();
 		UnderwaterCoach shown = off || profile == null ? null : coach(underwaterLog.copy(gson));
 		SwingUtilities.invokeLater(() -> target.updateUnderwater(shown, off));
+	}
+
+	/**
+	 * Each tick: counts the play watched toward what the player is doing, notes the monster they fight,
+	 * closes a random event that has ended and files it, and saves and sends the log when it moved.
+	 */
+	private void tickRandom(long now)
+	{
+		if (!config.randomEvents() || client.getGameState() != GameState.LOGGED_IN || profile == null)
+		{
+			return;
+		}
+		int tick = client.getTickCount();
+		Player me = client.getLocalPlayer();
+		if (me != null && me.getInteracting() instanceof NPC)
+		{
+			NPC target = (NPC) me.getInteracting();
+			if (RandomEvents.Event.ofNpc(target.getId()) == null && target.getName() != null)
+			{
+				fightName = Text.removeTags(target.getName());
+				fightTick = tick;
+			}
+		}
+		randomLog.played(activity(), Constants.GAME_TICK_LENGTH);
+		if (randomWatch.isOpen())
+		{
+			fileRandom(randomWatch.tick(tick, me == null ? null : spot(me), pack(), this::itemName));
+		}
+		if (tick % 100 == 0)
+		{
+			// The play watched is saved about once a minute, and the panel's clock moves with it.
+			randomSave = true;
+			randomDirty = true;
+		}
+		if (randomSave)
+		{
+			storeRandom();
+		}
+		if (randomDirty)
+		{
+			publishRandom();
+		}
+	}
+
+	private static RandomWatch.Spot spot(Player me)
+	{
+		net.runelite.api.coords.WorldPoint p = me.getWorldLocation();
+		return new RandomWatch.Spot(p.getX(), p.getY(), p.getPlane());
+	}
+
+	/** The pack, item id to quantity, or null when it cannot be read. */
+	private Map<Integer, Long> pack()
+	{
+		ItemContainer inv = client.getItemContainer(InventoryID.INV);
+		if (inv == null)
+		{
+			return null;
+		}
+		Map<Integer, Long> out = new HashMap<>();
+		for (Item item : inv.getItems())
+		{
+			if (item != null && item.getId() > 0)
+			{
+				out.merge(item.getId(), (long) item.getQuantity(), Long::sum);
+			}
+		}
+		return out;
+	}
+
+	private String itemName(int id)
+	{
+		ItemComposition c = itemManager.getItemComposition(id);
+		return c == null ? null : c.getName();
+	}
+
+	/**
+	 * What the player is doing: the monster fought in the last two minutes when fighting experience
+	 * came, or else the skill that gained most experience in them.
+	 */
+	private String activity()
+	{
+		int tick = client.getTickCount();
+		while (!recentXp.isEmpty() && tick - (int) recentXp.peekFirst()[0] > ACTIVITY_TICKS)
+		{
+			recentXp.removeFirst();
+		}
+		Map<Skill, Long> gained = new java.util.EnumMap<>(Skill.class);
+		boolean fought = false;
+		for (Object[] x : recentXp)
+		{
+			Skill skill = (Skill) x[1];
+			gained.merge(skill, ((Number) x[2]).longValue(), Long::sum);
+			fought |= FIGHTING.contains(skill);
+		}
+		if (fought && fightName != null && tick - fightTick <= ACTIVITY_TICKS)
+		{
+			return fightName;
+		}
+		Skill top = null;
+		for (Map.Entry<Skill, Long> e : gained.entrySet())
+		{
+			if (e.getKey() != Skill.HITPOINTS && (top == null || e.getValue() > gained.get(top)))
+			{
+				top = e.getKey();
+			}
+		}
+		return top == null ? RandomWatch.NO_ACTIVITY : top.getName();
+	}
+
+	private void fileRandom(RandomLog.Seen seen)
+	{
+		if (seen == null)
+		{
+			return;
+		}
+		randomLog.file(seen);
+		randomSave = true;
+		randomDirty = true;
+	}
+
+	/** Ends the random event under way, if any, and files it: after a hop, a logout, a new account or the log turned off. */
+	private void endRandom()
+	{
+		fileRandom(randomWatch.reset());
+		recentXp.clear();
+		fightName = null;
+		storeRandom();
+		randomDirty = true;
+	}
+
+	private void storeRandom()
+	{
+		if (randomSave && profile != null)
+		{
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, RANDOM_KEY, gson.toJson(randomLog));
+		}
+		randomSave = false;
+	}
+
+	/** Sends the panel the random events, worked out here from a copy, so Swing never reads what the client thread writes. */
+	private void publishRandom()
+	{
+		randomDirty = false;
+		ChroniclePanel target = panel;
+		if (target == null)
+		{
+			return;
+		}
+		RandomReport shown = !config.randomEvents() || profile == null ? null
+			: RandomReport.of(randomLog.copy(gson), System.currentTimeMillis(), randomWatch.current());
+		SwingUtilities.invokeLater(() -> target.updateRandom(shown));
 	}
 
 	private void storeAgility()

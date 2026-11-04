@@ -5,6 +5,7 @@ import com.codex.sessionchronicle.core.UnderwaterCoach;
 import com.codex.sessionchronicle.core.Bench;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.Pace;
+import com.codex.sessionchronicle.core.RandomReport;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.core.Week;
 import java.awt.BorderLayout;
@@ -55,6 +56,10 @@ public class ChroniclePanel extends PluginPanel
 	/** Underwater Agility and Thieving as last sent, or null; see {@link #updateUnderwater}. */
 	private UnderwaterCoach underwater;
 	private boolean underwaterOff = true;
+	/** Random events as last sent, or null when the log is off; see {@link #updateRandom}. */
+	private RandomReport random;
+	/** What of the random events the Journal tab last drew, so an unchanged log is not drawn again. */
+	private String randomKey = "";
 
 	private Summary live;
 	/** The make-X batch under way, shown on the live Session tab; null for none. */
@@ -328,6 +333,39 @@ public class ChroniclePanel extends PluginPanel
 		}
 	}
 
+	/**
+	 * The random events, sent on the Swing thread whenever an event ends, a costume piece is seen, and
+	 * about once a minute for the play watched. They are drawn on the Journal tab, before the sessions.
+	 *
+	 * @param random null when the random event log is turned off
+	 */
+	public void updateRandom(RandomReport random)
+	{
+		this.random = random;
+		String key = randomKey(random);
+		if (key.equals(randomKey))
+		{
+			return;
+		}
+		randomKey = key;
+		journalDrawn = null;
+		if (tab == 1 && isShowing())
+		{
+			rebuildJournal();
+		}
+	}
+
+	/** The random events as shown, rounded to the minute, so a moving clock rebuilds the tab about once a minute. */
+	private static String randomKey(RandomReport r)
+	{
+		if (r == null)
+		{
+			return "off";
+		}
+		return r.getEvents() + "/" + r.getWatchedMs() / 60_000 + "/" + r.getNow() / 60_000 + "/" + r.getCurrent() + "/" + r.piecesOwned()
+			+ "/" + r.getLog().getLastAt();
+	}
+
 	private void rebuildAgility()
 	{
 		agilityStale = false;
@@ -409,14 +447,14 @@ public class ChroniclePanel extends PluginPanel
 	{
 		if (records == null)
 		{
-			return "none";
+			return "none/" + randomKey;
 		}
 		Journal.Today t = records.getToday();
 		return System.identityHashCode(past) + "/" + t.getSessions() + "/" + t.getPlayedMs() / 60_000 + "/" + Format.xp(t.getXp())
 			+ "/" + Format.coins(t.getLoot()) + "/" + t.getKills() + "/" + t.getTopSkill() + "/" + records.getWeekPlayedMs() / 60_000
 			+ "/" + records.getWeekSessions() + "/" + records.getStreakDays() + "/" + records.getLongestStreak()
 			+ "/" + (records.getMostXp() == null ? 0 : records.getMostXp().getStartedAt())
-			+ "/" + (records.getMostLoot() == null ? 0 : records.getMostLoot().getStartedAt()) + "/" + records.getBests().size();
+			+ "/" + (records.getMostLoot() == null ? 0 : records.getMostLoot().getStartedAt()) + "/" + records.getBests().size() + "/" + randomKey;
 	}
 
 	private void rebuildJournal()
@@ -424,10 +462,13 @@ public class ChroniclePanel extends PluginPanel
 		journalDrawn = journalKey();
 		if (records == null)
 		{
-			replace(journal, SessionView.note("The journal is empty", "Sessions are filed here as they end."));
+			StackPanel stack = new StackPanel(8, 8);
+			stack.add(SessionView.note("The journal is empty", "Sessions are filed here as they end."));
+			RandomView.addTo(stack, random, items);
+			replace(journal, stack);
 			return;
 		}
-		replace(journal, JournalView.build(past, records, metrics, this::openPast));
+		replace(journal, JournalView.build(past, records, metrics, this::openPast, random, items));
 	}
 
 	private void rebuildCard(boolean force)

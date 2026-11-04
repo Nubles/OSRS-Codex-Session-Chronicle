@@ -33,6 +33,15 @@ final class JournalView
 	 */
 	static JComponent build(List<Summary> sessions, Journal.Records records, Segmented metrics, IntConsumer open)
 	{
+		return build(sessions, records, metrics, open, null, null);
+	}
+
+	/**
+	 * @param random the random events to show before the sessions, or null for none
+	 */
+	static JComponent build(List<Summary> sessions, Journal.Records records, Segmented metrics, IntConsumer open,
+		com.codex.sessionchronicle.core.RandomReport random, ItemIcons items)
+	{
 		StackPanel stack = new StackPanel(8, 8);
 		Journal.Today today = records.getToday();
 		if (today.getSessions() > 0)
@@ -58,6 +67,7 @@ final class JournalView
 		if (sessions.isEmpty())
 		{
 			stack.add(SessionView.note("The journal is empty", "Each session is filed here when it ends: when you log out and stay away longer than the break allowance in the settings."));
+			RandomView.addTo(stack, random, items);
 			return stack;
 		}
 
@@ -87,6 +97,7 @@ final class JournalView
 			}
 		}
 
+		RandomView.addTo(stack, random, items);
 		stack.add(new SectionHeader("Sessions", String.valueOf(sessions.size())));
 		for (int i = 0; i < sessions.size(); i++)
 		{
