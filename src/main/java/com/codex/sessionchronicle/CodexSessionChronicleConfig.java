@@ -148,4 +148,28 @@ public interface CodexSessionChronicleConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		keyName = "agilityCoach",
+		name = "Rooftop coach",
+		description = "Time your rooftop agility laps, race your best lap on each course, count marks of grace toward Graceful and compare courses, on the Agility tab",
+		position = 8,
+		section = display
+	)
+	default boolean agilityCoach()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "lapPlaque",
+		name = "Lap plaque",
+		description = "A slim plaque in the game view with the rooftop lap under way and how far ahead of or behind your best lap you are",
+		position = 9,
+		section = display
+	)
+	default boolean lapPlaque()
+	{
+		return false;
+	}
 }

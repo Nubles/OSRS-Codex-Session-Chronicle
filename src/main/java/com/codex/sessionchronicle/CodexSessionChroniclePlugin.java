@@ -1,13 +1,18 @@
 package com.codex.sessionchronicle;
 
+import com.codex.sessionchronicle.core.AgilityCoach;
+import com.codex.sessionchronicle.core.AgilityLog;
 import com.codex.sessionchronicle.core.Bosses;
 import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
 import com.codex.sessionchronicle.core.Goal;
+import com.codex.sessionchronicle.core.Graceful;
 import com.codex.sessionchronicle.core.Journal;
+import com.codex.sessionchronicle.core.LapClock;
 import com.codex.sessionchronicle.core.LedgerWorth;
 import com.codex.sessionchronicle.core.Midnight;
 import com.codex.sessionchronicle.core.Moment;
+import com.codex.sessionchronicle.core.Rooftop;
 import com.codex.sessionchronicle.core.Saved;
 import com.codex.sessionchronicle.core.Session;
 import com.codex.sessionchronicle.core.SlayerWatch;
@@ -15,6 +20,7 @@ import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.core.Week;
 import com.codex.sessionchronicle.overlay.GhostPlaque;
+import com.codex.sessionchronicle.overlay.LapPlaque;
 import com.codex.sessionchronicle.overlay.SessionTicker;
 import com.codex.sessionchronicle.ui.CardActions;
 import com.codex.sessionchronicle.ui.ChroniclePanel;
@@ -68,6 +74,8 @@ import net.runelite.api.events.ActorDeath;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.EnumID;
@@ -119,6 +127,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final Logger log = LoggerFactory.getLogger(CodexSessionChroniclePlugin.class);
 	private static final String CURRENT_KEY = "current";
 	private static final String JOURNAL_KEY = "journal";
+	/** The rooftop coach's log of laps, marks and Graceful, per account; see AgilityLog. */
+	static final String AGILITY_KEY = "agility";
 	/** Where a journal that could not be read at all is set aside, untouched, before it starts afresh. */
 	static final String DAMAGED_KEY = "journalUnreadable";
 	/** Codex Ledger's saved book, read only for its net worth; see LedgerWorth. */
@@ -182,6 +192,22 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private final SessionTicker ticker = new SessionTicker();
 	/** The optional plaque racing the session against the best earlier one of the same activity. */
 	private final GhostPlaque ghostPlaque = new GhostPlaque();
+	/** The optional plaque with the rooftop lap under way against the best lap. */
+	private final LapPlaque lapPlaque = new LapPlaque();
+	/** Rooftop laps timed in ticks, obstacle by obstacle. */
+	private final LapClock lapClock = new LapClock();
+	/** The account's rooftop laps, marks of grace and Graceful pieces. */
+	private AgilityLog agilityLog = new AgilityLog();
+	/** A lap count message waiting for the end of its tick, so the last obstacle's experience is in the lap. */
+	private Rooftop pendingLap;
+	private int pendingLapTick;
+	/** Agility experience last read, or -1 until read afresh after logging in or hopping. */
+	private int agilityXp = -1;
+	/** Marks of grace carried last read, or -1 until read afresh. */
+	private int carriedMarks = -1;
+	/** Whether the coach has something new for the panel, and whether its log needs saving. */
+	private boolean agilityDirty;
+	private boolean agilitySave;
 
 	/** Hands each item picture's load callback over only until it arrives. */
 	private final IconWatch iconWatch = new IconWatch();
@@ -417,6 +443,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		overlayManager.add(ticker);
 		ghostPlaque.setEnabled(config.ghostPace() && config.ghostPlaque());
 		overlayManager.add(ghostPlaque);
+		lapPlaque.setEnabled(config.agilityCoach() && config.lapPlaque());
+		overlayManager.add(lapPlaque);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
 		scheduleMidnight(runs.incrementAndGet());
 		clientThread.invokeLater(() ->
@@ -445,6 +473,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		}
 		overlayManager.remove(ticker);
 		overlayManager.remove(ghostPlaque);
+		overlayManager.remove(lapPlaque);
 		clientToolbar.removeNavigation(navButton);
 		clientThread.invokeLater(() ->
 		{
@@ -454,6 +483,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 			profile = null;
 			journal = Collections.emptyList();
 			pastSummaries = Collections.emptyList();
+			storeAgility();
+			agilityLog = new AgilityLog();
+			resetAgility();
 			pendingBegin = false;
 			snapshot = null;
 			ledgerBook = null;
@@ -473,6 +505,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			foundryPoints = -1;
 			portTasks = -1;
 			supplies.reset();
+			resetAgility();
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -488,6 +521,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			foundryPoints = -1;
 			portTasks = -1;
 			supplies.reset();
+			resetAgility();
 			busy.clear();
 			if (chronicle.isLive())
 			{
@@ -504,6 +538,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	{
 		chronicle.pause(System.currentTimeMillis());
 		saveCurrent();
+		storeAgility();
+		resetAgility();
 		loadProfile();
 		pendingBegin = client.getGameState() == GameState.LOGGED_IN;
 		publish();
@@ -537,8 +573,23 @@ public class CodexSessionChroniclePlugin extends Plugin
 		// only the settings that change what is drawn are worth acting on.
 		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
 			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())
-			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())))
+			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())
+			&& !"agilityCoach".equals(event.getKey()) && !"lapPlaque".equals(event.getKey())))
 		{
+			return;
+		}
+		if ("agilityCoach".equals(event.getKey()) || "lapPlaque".equals(event.getKey()))
+		{
+			lapPlaque.setEnabled(config.agilityCoach() && config.lapPlaque());
+			clientThread.invokeLater(() ->
+			{
+				if (!config.agilityCoach())
+				{
+					lapClock.reset();
+					pendingLap = null;
+				}
+				publishAgility();
+			});
 			return;
 		}
 		if ("ghostPace".equals(event.getKey()) || "ghostPlaque".equals(event.getKey()))
@@ -570,6 +621,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			tryBegin(now);
 		}
+		tickAgility(now);
 		if (!chronicle.isLive())
 		{
 			return;
@@ -868,6 +920,10 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
+		if (event.getSkill() == Skill.AGILITY)
+		{
+			agilityXp(event.getXp());
+		}
 		if (!chronicle.isLive() || guardTicks > 0 || statsSwapped())
 		{
 			return;
@@ -1112,6 +1168,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
+		if (event.getType() == ChatMessageType.GAMEMESSAGE && config.agilityCoach())
+		{
+			ChatParser.KillCount lap = ChatParser.killCount(Text.removeTags(event.getMessage()).replace('\u00a0', ' ').trim());
+			Rooftop course = lap == null ? null : Rooftop.byLapName(lap.getName());
+			if (course != null)
+			{
+				if (pendingLap != null)
+				{
+					lapDone(pendingLap, pendingLapTick, System.currentTimeMillis());
+				}
+				// Filed at the next tick, once the tick's last experience drop is in.
+				pendingLap = course;
+				pendingLapTick = client.getTickCount();
+			}
+		}
 		if (!chronicle.isLive() || (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM))
 		{
 			return;
@@ -1145,6 +1216,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			Actor foe = player.getInteracting();
 			String killer = foe instanceof NPC && foe.getName() != null ? Text.removeTags(foe.getName()) : null;
 			chronicle.death(System.currentTimeMillis(), killer);
+			lapClock.reset();
 			// What was lost waits at the grave; it is not spent.
 			supplies.quiet(client.getTickCount() + 10);
 			dirty = true;
@@ -1155,6 +1227,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private void loadProfile()
 	{
 		profile = configManager.getRSProfileKey();
+		agilityLog = profile == null ? new AgilityLog()
+			: AgilityLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, AGILITY_KEY));
+		agilityDirty = true;
 		journal = Collections.emptyList();
 		pastSummaries = Collections.emptyList();
 		chronicle.restore(null);
@@ -1306,6 +1381,193 @@ public class CodexSessionChroniclePlugin extends Plugin
 			Summary shown = live;
 			SwingUtilities.invokeLater(() -> target.update(shown, past, records, week, name));
 		}
+		if (agilityDirty)
+		{
+			publishAgility();
+		}
+	}
+
+	/** Forgets the lap under way and the readings that must be taken afresh: after a hop, a logout or a new account. */
+	private void resetAgility()
+	{
+		lapClock.reset();
+		pendingLap = null;
+		agilityXp = -1;
+		carriedMarks = -1;
+		lapPlaque.show(null);
+	}
+
+	/** Agility experience moved: a gain inside a lap is an obstacle crossed. */
+	private void agilityXp(int xp)
+	{
+		if (agilityXp >= 0 && xp > agilityXp && config.agilityCoach())
+		{
+			lapClock.xp(xp - agilityXp, client.getTickCount());
+			agilityDirty |= lapClock.isRunning();
+		}
+		agilityXp = xp;
+	}
+
+	/** Each tick: files a lap told last tick, keeps the clock honest about where the player is, and reads the level. */
+	private void tickAgility(long now)
+	{
+		if (!config.agilityCoach() || client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		if (pendingLap != null)
+		{
+			Rooftop done = pendingLap;
+			pendingLap = null;
+			lapDone(done, pendingLapTick, now);
+		}
+		int tick = client.getTickCount();
+		Rooftop here = courseHere();
+		lapClock.tick(here, tick);
+		if (agilityLog.level(client.getRealSkillLevel(Skill.AGILITY)))
+		{
+			agilityDirty = true;
+			agilitySave = true;
+		}
+		LapClock.Split split = lapClock.isRunning() ? lapClock.split(tick, agilityLog.get(lapClock.getCourse())) : null;
+		lapPlaque.show(split);
+		if (split != null && tick % 2 == 0)
+		{
+			// The Agility tab's clock moves while a lap runs; every other tick is smooth enough for a panel.
+			agilityDirty = true;
+		}
+		if (agilitySave)
+		{
+			agilitySave = false;
+			storeAgility();
+		}
+		if (agilityDirty)
+		{
+			publishAgility();
+		}
+	}
+
+	/** The rooftop course whose map region the player stands in, or null. */
+	private Rooftop courseHere()
+	{
+		Player player = client.getLocalPlayer();
+		if (player == null)
+		{
+			return null;
+		}
+		return Rooftop.byRegion(player.getWorldLocation().getRegionID());
+	}
+
+	/** A lap count message: the lap it ends is filed, and the next begins. */
+	private void lapDone(Rooftop course, int tick, long now)
+	{
+		AgilityLog.Lap lap = lapClock.lapDone(course, tick);
+		agilityDirty = true;
+		if (lap == null)
+		{
+			return;
+		}
+		if (agilityLog.lap(lap, now) && chronicle.isLive())
+		{
+			chronicle.moment(new Moment(Moment.Kind.BEST, now, course.getShortName() + " lap in " + LapClock.time(lap.getTicks()),
+				"New best rooftop lap", 0, 0));
+			dirty = true;
+			saveSoon = true;
+		}
+		agilitySave = true;
+	}
+
+	@Subscribe
+	public void onItemContainerChanged(ItemContainerChanged event)
+	{
+		if (!config.agilityCoach())
+		{
+			return;
+		}
+		int id = event.getContainerId();
+		ItemContainer container = event.getItemContainer();
+		if (container == null || id != InventoryID.INV && id != InventoryID.WORN && id != InventoryID.BANK)
+		{
+			return;
+		}
+		List<Integer> ids = new ArrayList<>();
+		int marks = 0;
+		for (Item item : container.getItems())
+		{
+			if (item == null || item.getId() <= 0)
+			{
+				continue;
+			}
+			ids.add(item.getId());
+			if (item.getId() == ItemID.GRACE)
+			{
+				marks += item.getQuantity();
+			}
+		}
+		Set<Graceful> seen = Graceful.among(ids);
+		if (agilityLog.sawGraceful(seen))
+		{
+			agilityDirty = true;
+			agilitySave = true;
+		}
+		if (id == InventoryID.BANK)
+		{
+			if (agilityLog.bankMarks(marks))
+			{
+				agilityDirty = true;
+				agilitySave = true;
+			}
+			return;
+		}
+		if (id == InventoryID.INV)
+		{
+			// A mark more in the pack, with no bank or trade open, while on a course: one picked up.
+			Rooftop on = lapClock.isRunning() ? lapClock.getCourse() : courseHere();
+			if (carriedMarks >= 0 && marks > carriedMarks && busy.isEmpty() && on != null)
+			{
+				agilityLog.mark(on, marks - carriedMarks);
+				agilitySave = true;
+			}
+			if (marks != carriedMarks)
+			{
+				agilityDirty = true;
+			}
+			carriedMarks = marks;
+		}
+	}
+
+	private void storeAgility()
+	{
+		if (profile != null)
+		{
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, AGILITY_KEY, gson.toJson(agilityLog));
+		}
+	}
+
+	/** Sends the panel the rooftop coach, worked out here from a copy, so Swing never reads what the client thread writes. */
+	private void publishAgility()
+	{
+		agilityDirty = false;
+		ChroniclePanel target = panel;
+		if (target == null)
+		{
+			return;
+		}
+		boolean off = !config.agilityCoach();
+		AgilityCoach coach = null;
+		if (!off && profile != null)
+		{
+			AgilityLog copy = agilityLog.copy(gson);
+			int tick = client.getTickCount();
+			LapClock.Split split = lapClock.isRunning() ? lapClock.split(tick, copy.get(lapClock.getCourse())) : null;
+			AgilityCoach.Diaries diaries = new AgilityCoach.Diaries(
+				client.getVarbitValue(VarbitID.DESERT_DIARY_HARD_COMPLETE) == 1,
+				client.getVarbitValue(VarbitID.FREMENNIK_DIARY_HARD_COMPLETE) == 1,
+				client.getVarbitValue(VarbitID.ARDOUGNE_DIARY_ELITE_COMPLETE) == 1);
+			coach = AgilityCoach.of(copy, copy.getLevel(), diaries, Math.max(0, carriedMarks), split);
+		}
+		AgilityCoach shown = coach;
+		SwingUtilities.invokeLater(() -> target.updateAgility(shown, off));
 	}
 
 	/** Asks where to save the card with RuneLite's own file chooser, then writes it there; runs on the Swing thread. */
