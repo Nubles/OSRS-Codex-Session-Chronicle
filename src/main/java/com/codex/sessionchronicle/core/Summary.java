@@ -554,15 +554,15 @@ public final class Summary
 		return "kills";
 	}
 
-	/** "48 Seers' Village Rooftop laps", "12 Giants' Foundry swords": a round line in a few words. */
+	/** "48 Seers' Village Rooftop laps", "12 Giants' Foundry swords", "9 Port tasks": a round line in a few words. */
 	static String rounds(Session.KillLine line)
 	{
 		int n = line.count();
 		String name = line.getName();
 		String noun = Session.KillLine.roundNoun(name);
-		if ("laps".equals(noun))
+		if ("laps".equals(noun) || "tasks".equals(noun))
 		{
-			// The game names the line "Seers' Village Rooftop lap".
+			// The line is named for one round already: "Seers' Village Rooftop lap", "Port task".
 			return n + " " + name + (n == 1 ? "" : "s");
 		}
 		return n + " " + name + " " + (n == 1 ? noun.substring(0, noun.length() - 1) : noun);

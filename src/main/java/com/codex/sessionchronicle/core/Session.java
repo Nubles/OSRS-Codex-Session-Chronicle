@@ -463,7 +463,7 @@ public class Session
 			"(?i)\\b(?:supply crate|reward pool|reward cart|casket|loot sack|seed pack|spoils of war)");
 		private static final Pattern LAP = Pattern.compile("\\blap\\b");
 		private static final Pattern ROUNDS = Pattern.compile(
-			"(?i)(?:\\blap\\b|wintertodt|tempoross|guardians of the rift|mahogany homes|giants' foundry|herbiboar harvest)");
+			"(?i)(?:\\blap\\b|wintertodt|tempoross|guardians of the rift|mahogany homes|giants' foundry|herbiboar harvest|\\bport task\\b)");
 
 		String name;
 		int looted;
@@ -557,7 +557,7 @@ public class Session
 			return name != null && ROUNDS.matcher(name).find() && !CONTAINERS.matcher(name).find();
 		}
 
-		/** What one round of this line is called, in the plural: "laps", "swords", "contracts", "games". */
+		/** What one round of this line is called, in the plural: "laps", "swords", "contracts", "tasks", "games". */
 		static String roundNoun(String name)
 		{
 			String n = name.toLowerCase(Locale.ROOT);
@@ -576,6 +576,10 @@ public class Session
 			if (n.contains("herbiboar"))
 			{
 				return "harvests";
+			}
+			if (n.contains("port task"))
+			{
+				return "tasks";
 			}
 			return "games";
 		}

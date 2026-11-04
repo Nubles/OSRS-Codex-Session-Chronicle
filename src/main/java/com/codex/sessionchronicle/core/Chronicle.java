@@ -360,6 +360,26 @@ public class Chronicle
 	/** The minigame line a handed-in Giants' Foundry sword counts on. */
 	public static final String GIANTS_FOUNDRY = "Giants' Foundry";
 
+	/** The line a Sailing port task (a courier or bounty task from a port's notice board) counts on. */
+	public static final String PORT_TASKS = "Port task";
+	/** The most port tasks a player can hold at once (five, from Sailing level 84), so the most one hand-in can finish. */
+	static final int MAX_PORT_TASKS = 5;
+
+	/**
+	 * Port tasks finished between two readings of the game's count of port tasks completed. Only a
+	 * rise of one to five from a count already above zero is believed: a count read before the game
+	 * has sent it (zero) or a jump of more than the tasks a player can hold is a fresh reading, not play.
+	 *
+	 * @param before the count last read, or -1 when it is to be read afresh
+	 * @param now the count read now
+	 * @return how many tasks to count on the session
+	 */
+	public static int portTasksDone(int before, int now)
+	{
+		int rise = now - before;
+		return before > 0 && rise > 0 && rise <= MAX_PORT_TASKS ? rise : 0;
+	}
+
 	/**
 	 * One round of a minigame the game keeps no count of in chat, such as a Giants' Foundry sword.
 	 * It counts on its own line, as a kill count does, so a skiller sees their rounds too.

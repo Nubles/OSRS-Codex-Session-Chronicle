@@ -220,6 +220,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private long recentKcAt;
 	/** Giants' Foundry reputation last read, or -1 until it is read afresh after logging in or hopping. */
 	private int foundryPoints = -1;
+	/** The game's count of Sailing port tasks completed last read, or -1 until it is read afresh after logging in or hopping. */
+	private int portTasks = -1;
 	/** Food, potions, runes and ammunition used, read from what is carried tick by tick. */
 	private final SupplyWatch supplies = new SupplyWatch();
 	/** Banks, shops, trades and the exchange open now: items leave through them without being used. */
@@ -469,6 +471,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			// The client takes its varps afresh in the new world: the task may read nothing for a few ticks.
 			slayer.arrived();
 			foundryPoints = -1;
+			portTasks = -1;
 			supplies.reset();
 		}
 		if (state == GameState.LOGGED_IN)
@@ -483,6 +486,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			pendingBegin = false;
 			foundryPoints = -1;
+			portTasks = -1;
 			supplies.reset();
 			busy.clear();
 			if (chronicle.isLive())
@@ -574,6 +578,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		chronicle.tick(now);
 		ticks++;
 		readFoundry();
+		readPortTasks();
 		readSupplies();
 		slayer.tick();
 		if (slayer.isDue())
@@ -981,6 +986,23 @@ public class CodexSessionChroniclePlugin extends Plugin
 			dirty = true;
 		}
 		foundryPoints = points;
+	}
+
+	/**
+	 * Sailing port tasks: the game keeps a count of those completed, so each rise of it is a task
+	 * handed in, counted on its own line as a Wintertodt or a rooftop lap count is.
+	 */
+	private void readPortTasks()
+	{
+		int count = client.getVarpValue(VarPlayerID.PORT_TASKS_COMPLETED);
+		if (Chronicle.portTasksDone(portTasks, count) > 0)
+		{
+			// Counted as the game counts it, from the first task of the rise, so the line shows the lifetime total too.
+			chronicle.killCount(Chronicle.PORT_TASKS, portTasks + 1);
+			chronicle.killCount(Chronicle.PORT_TASKS, count);
+			dirty = true;
+		}
+		portTasks = count;
 	}
 
 	/** Reads the slayer task as the game's slayer helper shows it, and tells the session. */
