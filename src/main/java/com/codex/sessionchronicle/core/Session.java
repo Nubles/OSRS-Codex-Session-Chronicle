@@ -133,6 +133,10 @@ public class Session
 		tripCount = (int) Saved.clamp(tripCount, MAX_KILLS);
 		tripMs = Saved.clamp(tripMs, playedMs);
 		bestTripMs = Saved.clamp(bestTripMs, playedMs);
+		if (track != null)
+		{
+			track = track.repair();
+		}
 		if (worthStart != null && (worthStart < 0 || worthStart > Saved.MAX_WORTH))
 		{
 			worthStart = null;
@@ -182,6 +186,12 @@ public class Session
 	 */
 	String activity;
 
+	/**
+	 * Where the session stood at each minute of play, for Ghost pace: null in a session begun before it
+	 * was kept, which later sessions then race at its average pace.
+	 */
+	Track track;
+
 	/** Net worth by Codex Ledger as the session began, or null when it is not known. */
 	Long worthStart;
 	/** Net worth by Codex Ledger as last read during the session, or null. */
@@ -196,6 +206,7 @@ public class Session
 		startedAt = now;
 		lastSeenAt = now;
 		this.player = player;
+		track = new Track();
 	}
 
 	public long getStartedAt()
@@ -238,6 +249,12 @@ public class Session
 	public Goal getGoal()
 	{
 		return goal == null || !goal.isValid() ? null : goal;
+	}
+
+	/** Where the session stood minute by minute of play, or null when it was not kept. */
+	public Track getTrack()
+	{
+		return track;
 	}
 
 	/** What a filed session was mainly spent on, or null. */

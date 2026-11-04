@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Ghost;
 import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
 import com.codex.sessionchronicle.core.Pace;
@@ -113,6 +114,13 @@ final class SessionView
 		if (goal != null)
 		{
 			stack.add(goal);
+		}
+
+		Ghost ghost = s.getGhost();
+		if (ghost != null)
+		{
+			stack.add(new SectionHeader("Ghost pace", "vs your best"));
+			stack.add(new GhostRow(ghost));
 		}
 
 		List<Pace.Line> pace = s.getPace();

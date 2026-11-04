@@ -148,6 +148,7 @@ public final class Journal
 		c.worthNow = s.worthNow;
 		c.slayer = s.slayer;
 		c.activity = Pace.activity(s);
+		c.track = s.track == null ? null : s.track.filed();
 		c.slayerDone = s.slayerDone;
 		// The journal keeps what the trips came to, not each trip.
 		c.trips = null;

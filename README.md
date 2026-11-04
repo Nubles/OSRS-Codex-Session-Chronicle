@@ -16,6 +16,7 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 - **Profit.** Food eaten, potion doses drunk, and runes, ammunition and cannonballs used are priced and taken off the loot, so you see what the session really made. Items dropped, banked or lost on death are not counted as used.
 - **Laps and rounds.** Rooftop laps and skilling minigames (Wintertodt, Tempoross, Guardians of the Rift, Mahogany Homes, Giants' Foundry, herbiboar) get their own list, a rounds goal, rounds an hour in Pace and headlines like "48 Seers' Village Rooftop laps". They never count as kills.
 - **Pace.** Your main skill's experience an hour, kills an hour and loot an hour set beside your earlier sessions of the same kind: "Faster than your best", "About your usual".
+- **Ghost pace.** Race yourself. While a session runs, it is set against your own best earlier session of the same main activity (the same boss, or the same skill), at the same minute of play: "+23k xp ahead of your best Zulrah session at 40:00". A small line shows the gap minute by minute, green while you are ahead and ember while you are behind, and a boss race sets the kills side by side too ("3 kills ahead"). The best session is the fastest one in experience an hour of 15 minutes or more, so the rival stays the same all session. Every session now keeps where it stood each minute of play (fewer marks in the journal, so it stays small), and a ghost from before that is raced at its average pace and says so. Turn on *Ghost plaque* for the same race in a slim plaque in the game view.
 - **Goals.** Give the session a goal with one click (experience, loot, kills, laps and rounds, or play time), with offers drawn from your own journal, and see when you should reach it at your pace.
 - **Trips.** Each trip out from the bank and back, timed in play time, with what it brought; your average and quickest.
 - **Slayer.** Your task: how many are left, your kill rate and when it should be done.
@@ -31,6 +32,10 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 <p align="center">
   <img src="docs/screenshots/ticker.png" alt="The ticker">
 </p>
+<p align="center">
+  <img src="docs/screenshots/ghost.png" width="225" alt="Ghost pace on the Session tab">
+  <img src="docs/screenshots/ghost-plaque.png" width="300" alt="The ghost plaque">
+</p>
 
 ## Settings that matter
 
@@ -40,6 +45,8 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 | Sessions kept | How many finished sessions the journal keeps for each account. |
 | Notable drop value | A single drop worth at least this many coins becomes one of the session's moments. |
 | Session ticker | The plaque in the game view. Off by default. |
+| Ghost pace | Races the session against your best earlier session of the same activity on the Session tab. On by default. |
+| Ghost plaque | The same race in a slim plaque in the game view. Off by default. |
 | Recap last session, Goal reached in chat | Lines in the chat box when a new session begins and when the session's goal is reached. |
 | Name on cards | Writes your character's name on the cards and their text. On by default. |
 | Worth on cards | Shows how your net worth moved, by Codex Ledger, on the week card. Off by default. |

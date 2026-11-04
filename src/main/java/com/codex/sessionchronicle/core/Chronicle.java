@@ -84,6 +84,10 @@ public class Chronicle
 		{
 			current.playedMs += Math.min(gap, MAX_TICK_GAP_MS);
 		}
+		if (current.track != null && current.playedMs >= current.track.nextMarkMs())
+		{
+			current.track.mark(current.playedMs, current.totalXp(), current.totalKills());
+		}
 		lastTick = now;
 		current.lastSeenAt = now;
 	}
