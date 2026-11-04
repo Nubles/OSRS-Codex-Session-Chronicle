@@ -236,4 +236,17 @@ public interface CodexSessionChronicleConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		keyName = "randomEvents",
+		name = "Random event log",
+		description = "Log every random event that comes to you on the Journal tab: which, when, what you were doing, whether you took part, "
+			+ "dismissed or ignored it and what it gave, your events an hour against the wiki's timer, and the event costumes' pieces still to come",
+		position = 15,
+		section = display
+	)
+	default boolean randomEvents()
+	{
+		return true;
+	}
 }
