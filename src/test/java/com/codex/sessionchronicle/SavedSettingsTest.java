@@ -13,7 +13,7 @@ public class SavedSettingsTest
 	/** Every key the released plugin (main) saves settings under. */
 	private static final String[] ON_MAIN = {"breakMinutes", "chatRecap", "journalSize", "nameOnCard", "showTicker", "valuableDrop"};
 	/** Keys added since, which players will have saved by the time this ships. */
-	private static final String[] ADDED = {"goalChat", "worthOnCard"};
+	private static final String[] ADDED = {"goalChat", "worthOnCard", "ghostPace", "ghostPlaque"};
 
 	@Test
 	public void savedSettingsKeepTheirKeys()

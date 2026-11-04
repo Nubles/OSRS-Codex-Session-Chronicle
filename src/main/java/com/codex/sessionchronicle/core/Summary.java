@@ -67,6 +67,8 @@ public final class Summary
 	private final SlayerTask slayer;
 	private final List<SlayerTask> slayerDone;
 	private List<Pace.Line> pace = Collections.emptyList();
+	/** The session raced against the player's best earlier one of the same activity; null when there is none. */
+	private Ghost ghost;
 	private Map<Goal.Kind, List<Goal.Preset>> presets = Collections.emptyMap();
 
 	private Summary(Session s, State state)
@@ -166,8 +168,21 @@ public final class Summary
 	 */
 	public static Summary of(Session session, State state, List<Session> journal)
 	{
+		return of(session, state, journal, true);
+	}
+
+	/**
+	 * A telling as {@link #of(Session, State, List)}, with the race against the best earlier session of
+	 * the same activity only when {@code ghost} is on.
+	 */
+	public static Summary of(Session session, State state, List<Session> journal, boolean ghost)
+	{
 		Summary summary = new Summary(session, state);
 		summary.pace = Collections.unmodifiableList(Pace.of(session, journal));
+		if (ghost && state != State.ENDED)
+		{
+			summary.ghost = Ghost.of(session, journal);
+		}
 		if (state != State.ENDED && session.getGoal() == null)
 		{
 			Map<Goal.Kind, List<Goal.Preset>> offered = new EnumMap<>(Goal.Kind.class);
@@ -190,7 +205,14 @@ public final class Summary
 		return s.state + "/" + s.startedAt + "/" + s.playedMs / 60_000 + "/" + s.totalXp + "/" + s.lootValue + "/" + s.kills
 			+ "/" + s.levels + "/" + s.deaths + "/" + s.moments.size() + "/" + s.drops.size() + "/" + s.player
 			+ "/" + (s.goal == null ? "-" : s.goal.getKind() + ":" + s.goal.getTarget() + ":" + s.goal.isReached())
-			+ "/" + s.pace.size() + "/" + s.presets.size() + "/" + s.supplies + "/" + s.roundTotal;
+			+ "/" + s.pace.size() + "/" + s.presets.size() + "/" + s.supplies + "/" + s.roundTotal
+			+ "/" + (s.ghost == null ? "-" : s.ghost.getGhostStartedAt() + ":" + s.ghost.getLead() / 500);
+	}
+
+	/** The race against the best earlier session of the same activity, for a session under way; or null. */
+	public Ghost getGhost()
+	{
+		return ghost;
 	}
 
 	public State getState()

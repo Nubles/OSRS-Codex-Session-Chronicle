@@ -14,6 +14,7 @@ import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.core.Week;
+import com.codex.sessionchronicle.overlay.GhostPlaque;
 import com.codex.sessionchronicle.overlay.SessionTicker;
 import com.codex.sessionchronicle.ui.CardActions;
 import com.codex.sessionchronicle.ui.ChroniclePanel;
@@ -179,6 +180,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 
 	private final Chronicle chronicle = new Chronicle();
 	private final SessionTicker ticker = new SessionTicker();
+	/** The optional plaque racing the session against the best earlier one of the same activity. */
+	private final GhostPlaque ghostPlaque = new GhostPlaque();
 
 	/** Hands each item picture's load callback over only until it arrives. */
 	private final IconWatch iconWatch = new IconWatch();
@@ -410,6 +413,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		clientToolbar.addNavigation(navButton);
 		ticker.setEnabled(config.showTicker());
 		overlayManager.add(ticker);
+		ghostPlaque.setEnabled(config.ghostPace() && config.ghostPlaque());
+		overlayManager.add(ghostPlaque);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
 		scheduleMidnight(runs.incrementAndGet());
 		clientThread.invokeLater(() ->
@@ -437,6 +442,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			midnight = null;
 		}
 		overlayManager.remove(ticker);
+		overlayManager.remove(ghostPlaque);
 		clientToolbar.removeNavigation(navButton);
 		clientThread.invokeLater(() ->
 		{
@@ -526,8 +532,16 @@ public class CodexSessionChroniclePlugin extends Plugin
 		// The plugin's own saves of the session and journal land here too, about once a minute;
 		// only the settings that change what is drawn are worth acting on.
 		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
-			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())))
+			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())
+			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())))
 		{
+			return;
+		}
+		if ("ghostPace".equals(event.getKey()) || "ghostPlaque".equals(event.getKey()))
+		{
+			ghostPlaque.setEnabled(config.ghostPace() && config.ghostPlaque());
+			// The Session tab draws the race, or stops drawing it, at once.
+			clientThread.invokeLater(this::publish);
 			return;
 		}
 		ticker.setEnabled(config.showTicker());
@@ -1247,12 +1261,14 @@ public class CodexSessionChroniclePlugin extends Plugin
 			snapshot = json;
 			snapshotProfile = profile;
 			copy = gson.fromJson(json, Session.class);
-			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED, journal);
+			live = Summary.of(copy, chronicle.isLive() ? Summary.State.LIVE : Summary.State.PAUSED, journal, config.ghostPace());
+			ghostPlaque.show(chronicle.isLive() ? live.getGhost() : null);
 			ticker.show(view(copy, System.currentTimeMillis(), chronicle.isLive()));
 		}
 		else
 		{
 			ticker.show(null);
+			ghostPlaque.show(null);
 		}
 		long now = System.currentTimeMillis();
 		ZoneId zone = ZoneId.systemDefault();

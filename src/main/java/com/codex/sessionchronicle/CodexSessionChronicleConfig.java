@@ -124,4 +124,28 @@ public interface CodexSessionChronicleConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		keyName = "ghostPace",
+		name = "Ghost pace",
+		description = "On the Session tab, race the session against your best earlier session of the same activity at the same minute of play",
+		position = 6,
+		section = display
+	)
+	default boolean ghostPace()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "ghostPlaque",
+		name = "Ghost plaque",
+		description = "A slim plaque in the game view with how far ahead of or behind your best session of the same activity you are",
+		position = 7,
+		section = display
+	)
+	default boolean ghostPlaque()
+	{
+		return false;
+	}
 }
