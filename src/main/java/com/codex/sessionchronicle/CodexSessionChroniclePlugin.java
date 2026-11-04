@@ -2,6 +2,8 @@ package com.codex.sessionchronicle;
 
 import com.codex.sessionchronicle.core.AgilityCoach;
 import com.codex.sessionchronicle.core.AgilityLog;
+import com.codex.sessionchronicle.core.Bench;
+import com.codex.sessionchronicle.core.BenchLog;
 import com.codex.sessionchronicle.core.Bosses;
 import com.codex.sessionchronicle.core.ChatParser;
 import com.codex.sessionchronicle.core.Chronicle;
@@ -19,6 +21,7 @@ import com.codex.sessionchronicle.core.SlayerWatch;
 import com.codex.sessionchronicle.core.SupplyWatch;
 import com.codex.sessionchronicle.core.Summary;
 import com.codex.sessionchronicle.core.Week;
+import com.codex.sessionchronicle.overlay.BenchPlaque;
 import com.codex.sessionchronicle.overlay.GhostPlaque;
 import com.codex.sessionchronicle.overlay.LapPlaque;
 import com.codex.sessionchronicle.overlay.SessionTicker;
@@ -129,6 +132,13 @@ public class CodexSessionChroniclePlugin extends Plugin
 	private static final String JOURNAL_KEY = "journal";
 	/** The rooftop coach's log of laps, marks and Graceful, per account; see AgilityLog. */
 	static final String AGILITY_KEY = "agility";
+	/** The account's make-X actions, their pace and the bank's supplies for them; see BenchLog. */
+	static final String BENCH_KEY = "bench";
+	/** Skills whose experience comes from fighting: an item used up beside it (a potion drunk) is no make-X action. */
+	private static final Set<Skill> FIGHTING = java.util.EnumSet.of(Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED,
+		Skill.MAGIC, Skill.HITPOINTS, Skill.PRAYER, Skill.SLAYER);
+	/** Ticks between saves of the bench log while a batch runs, about half a minute. */
+	private static final int BENCH_SAVE_TICKS = 50;
 	/** Where a journal that could not be read at all is set aside, untouched, before it starts afresh. */
 	static final String DAMAGED_KEY = "journalUnreadable";
 	/** Codex Ledger's saved book, read only for its net worth; see LedgerWorth. */
@@ -208,6 +218,24 @@ public class CodexSessionChroniclePlugin extends Plugin
 	/** Whether the coach has something new for the panel, and whether its log needs saving. */
 	private boolean agilityDirty;
 	private boolean agilitySave;
+
+	/** The optional plaque with the make-X batch under way. */
+	private final BenchPlaque benchPlaque = new BenchPlaque();
+	/** Make-X actions read from the pack tick by tick. */
+	private final Bench bench = new Bench();
+	/** The account's make-X recipes, their pace and the bank's supplies for them. */
+	private BenchLog benchLog = new BenchLog();
+	private boolean benchSave;
+	private int benchSaveTick;
+	/** The batch as last sent to the panel, by its key, so an unchanged one is not sent again. */
+	private String benchSent;
+	/** Each skill's experience last read, for which skilling skill gained on a tick. */
+	private final Map<Skill, Integer> skillXp = new java.util.EnumMap<>(Skill.class);
+	/** The skilling skill that gained experience last, and on which tick. */
+	private String xpSkill;
+	private int xpTick = -10;
+	/** The tick food or a potion was last eaten or drunk: the pack's change then is no make-X action. */
+	private int ateTick = -10;
 
 	/** Hands each item picture's load callback over only until it arrives. */
 	private final IconWatch iconWatch = new IconWatch();
@@ -445,6 +473,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		overlayManager.add(ghostPlaque);
 		lapPlaque.setEnabled(config.agilityCoach() && config.lapPlaque());
 		overlayManager.add(lapPlaque);
+		benchPlaque.setEnabled(config.benchProgress() && config.benchPlaque());
+		overlayManager.add(benchPlaque);
 		expiry = executor.scheduleWithFixedDelay(() -> clientThread.invoke(this::checkExpiry), 30, 30, TimeUnit.SECONDS);
 		scheduleMidnight(runs.incrementAndGet());
 		clientThread.invokeLater(() ->
@@ -474,6 +504,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		overlayManager.remove(ticker);
 		overlayManager.remove(ghostPlaque);
 		overlayManager.remove(lapPlaque);
+		overlayManager.remove(benchPlaque);
 		clientToolbar.removeNavigation(navButton);
 		clientThread.invokeLater(() ->
 		{
@@ -486,6 +517,9 @@ public class CodexSessionChroniclePlugin extends Plugin
 			storeAgility();
 			agilityLog = new AgilityLog();
 			resetAgility();
+			storeBench();
+			benchLog = new BenchLog();
+			resetBench();
 			pendingBegin = false;
 			snapshot = null;
 			ledgerBook = null;
@@ -506,6 +540,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			portTasks = -1;
 			supplies.reset();
 			resetAgility();
+			resetBench();
 		}
 		if (state == GameState.LOGGED_IN)
 		{
@@ -522,6 +557,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 			portTasks = -1;
 			supplies.reset();
 			resetAgility();
+			storeBench();
+			resetBench();
 			busy.clear();
 			if (chronicle.isLive())
 			{
@@ -540,6 +577,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		saveCurrent();
 		storeAgility();
 		resetAgility();
+		storeBench();
+		resetBench();
 		loadProfile();
 		pendingBegin = client.getGameState() == GameState.LOGGED_IN;
 		publish();
@@ -574,8 +613,21 @@ public class CodexSessionChroniclePlugin extends Plugin
 		if (!CodexSessionChronicleConfig.GROUP.equals(event.getGroup()) || event.getProfile() != null
 			|| (!"showTicker".equals(event.getKey()) && !"nameOnCard".equals(event.getKey()) && !"worthOnCard".equals(event.getKey())
 			&& !"ghostPace".equals(event.getKey()) && !"ghostPlaque".equals(event.getKey())
-			&& !"agilityCoach".equals(event.getKey()) && !"lapPlaque".equals(event.getKey())))
+			&& !"agilityCoach".equals(event.getKey()) && !"lapPlaque".equals(event.getKey())
+			&& !"benchProgress".equals(event.getKey()) && !"benchPlaque".equals(event.getKey())))
 		{
+			return;
+		}
+		if ("benchProgress".equals(event.getKey()) || "benchPlaque".equals(event.getKey()))
+		{
+			benchPlaque.setEnabled(config.benchProgress() && config.benchPlaque());
+			clientThread.invokeLater(() ->
+			{
+				if (!config.benchProgress())
+				{
+					resetBench();
+				}
+			});
 			return;
 		}
 		if ("agilityCoach".equals(event.getKey()) || "lapPlaque".equals(event.getKey()))
@@ -622,6 +674,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			tryBegin(now);
 		}
 		tickAgility(now);
+		tickBench(now);
 		if (!chronicle.isLive())
 		{
 			return;
@@ -802,6 +855,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			// The bank's last items moved this tick; read afresh rather than count them as used.
 			supplies.reset();
+			bench.forget();
 		}
 		if (isBank(event.getGroupId()) && chronicle.isLive())
 		{
@@ -924,6 +978,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 		{
 			agilityXp(event.getXp());
 		}
+		Integer was = skillXp.put(event.getSkill(), event.getXp());
+		if (was != null && event.getXp() > was && !FIGHTING.contains(event.getSkill()))
+		{
+			xpSkill = event.getSkill().getName();
+			xpTick = client.getTickCount();
+		}
 		if (!chronicle.isLive() || guardTicks > 0 || statsSwapped())
 		{
 			return;
@@ -954,6 +1014,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 		String option = event.getMenuOption() == null ? "" : Text.removeTags(event.getMenuOption()).toLowerCase(Locale.ROOT);
 		if (option.equals("eat") || option.equals("drink"))
 		{
+			ateTick = client.getTickCount();
 			supplies.ate(client.getTickCount());
 		}
 		else if (AWAY.contains(option))
@@ -1217,6 +1278,7 @@ public class CodexSessionChroniclePlugin extends Plugin
 			String killer = foe instanceof NPC && foe.getName() != null ? Text.removeTags(foe.getName()) : null;
 			chronicle.death(System.currentTimeMillis(), killer);
 			lapClock.reset();
+			bench.forget();
 			// What was lost waits at the grave; it is not spent.
 			supplies.quiet(client.getTickCount() + 10);
 			dirty = true;
@@ -1230,6 +1292,8 @@ public class CodexSessionChroniclePlugin extends Plugin
 		agilityLog = profile == null ? new AgilityLog()
 			: AgilityLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, AGILITY_KEY));
 		agilityDirty = true;
+		benchLog = profile == null ? new BenchLog()
+			: BenchLog.read(gson, configManager.getRSProfileConfiguration(CodexSessionChronicleConfig.GROUP, BENCH_KEY));
 		journal = Collections.emptyList();
 		pastSummaries = Collections.emptyList();
 		chronicle.restore(null);
@@ -1480,6 +1544,12 @@ public class CodexSessionChroniclePlugin extends Plugin
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
+		if (event.getContainerId() == InventoryID.BANK && event.getItemContainer() != null && config.benchProgress() && profile != null)
+		{
+			Map<Integer, Integer> banked = new HashMap<>();
+			add(banked, event.getItemContainer());
+			benchSave |= bench.sawBank(banked, System.currentTimeMillis(), benchLog);
+		}
 		if (!config.agilityCoach())
 		{
 			return;
@@ -1534,6 +1604,69 @@ public class CodexSessionChroniclePlugin extends Plugin
 			}
 			carriedMarks = marks;
 		}
+	}
+
+	/**
+	 * Each tick: reads the pack for a make-X action, keeps the batch under way and sends it to the panel
+	 * and the plaque. Nothing is sent to Codex Guardian and no alert is raised: its own idle rule covers that.
+	 */
+	private void tickBench(long now)
+	{
+		if (!config.benchProgress() || client.getGameState() != GameState.LOGGED_IN || profile == null)
+		{
+			return;
+		}
+		int tick = client.getTickCount();
+		Map<Integer, Integer> pack = new HashMap<>();
+		add(pack, client.getItemContainer(InventoryID.INV));
+		boolean away = !busy.isEmpty() || tick - ateTick <= 1;
+		String skill = tick - xpTick <= 1 ? xpSkill : null;
+		if (bench.tick(tick, pack, away, skill, now, benchLog, id -> itemManager.getItemComposition(id).getName()))
+		{
+			benchSave = true;
+		}
+		Bench.Progress progress = bench.progress(tick, benchLog);
+		benchPlaque.show(progress);
+		if (benchSave && (tick - benchSaveTick >= BENCH_SAVE_TICKS || progress == null || !progress.isRunning()))
+		{
+			storeBench();
+		}
+		sendBench(progress);
+	}
+
+	private void sendBench(Bench.Progress progress)
+	{
+		String key = progress == null ? null : progress.key();
+		if (java.util.Objects.equals(key, benchSent))
+		{
+			return;
+		}
+		benchSent = key;
+		ChroniclePanel target = panel;
+		if (target != null)
+		{
+			SwingUtilities.invokeLater(() -> target.updateBench(progress));
+		}
+	}
+
+	/** Forgets the pack and the batch under way: after a hop, a logout, a new account or the setting turned off. */
+	private void resetBench()
+	{
+		bench.reset();
+		benchPlaque.show(null);
+		skillXp.clear();
+		xpSkill = null;
+		sendBench(null);
+	}
+
+	private void storeBench()
+	{
+		benchSaveTick = client.getTickCount();
+		if (benchSave && profile != null)
+		{
+			configManager.setConfiguration(CodexSessionChronicleConfig.GROUP, profile, BENCH_KEY, gson.toJson(benchLog));
+		}
+		benchSave = false;
 	}
 
 	private void storeAgility()

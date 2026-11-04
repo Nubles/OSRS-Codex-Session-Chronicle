@@ -24,6 +24,7 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 - **Journal.** The day so far, then every finished session, newest first, with your records and your activities.
 - **Cards.** The session, or the last seven days, as a picture to save or copy, or as text to paste into a chat.
 - **Rooftop coach.** The Agility tab times every rooftop lap in game ticks, start to start, and keeps your best lap on each course as a ghost: the lap under way is set against it obstacle by obstacle ("1.8s behind at obstacle 3", "on pace for 44.4s"). Each course you run keeps its laps, best and usual lap, the recent laps as a little chart, experience an hour and the marks of grace you actually found. A Graceful card shows the pieces you own (seen in your bank, worn or carried), the marks you have, the marks still to find and about how long that takes at your pace. *Best for you now* ranks every course you can run by experience an hour, from your own laps once you have five on a course and the wiki's rates before that, each labelled, with marks an hour beside it, including the 80% cut 20 levels over a course. Your best laps become session moments. Turn on *Lap plaque* for the lap and its gap in the game view. Obstacles are not highlighted here, since RuneLite's own Agility plugin already does that.
+- **At the bench.** While you fletch, smith, cook, mix potions, cut gems or craft in batches, the Session tab shows what you are making, how many more your pack holds and the time left at your own pace, with the load as a thin bar ("14 left, about 0:25 to go"). It also counts what your bank holds for it and says how long pack and bank last together, bank trips included: "Pack and bank: 1,204 more, about 47m with 44 bank trips". Nothing here is a speed from a table: each kind of action is learnt from your own play (the ticks between your actions, the time from a load's last action to the next load's first, and how many a load holds), kept across sessions, and says how many of your actions it rests on. A burnt fish still counts, and unfinished potions, which give no experience, are learnt once you make three in a row. The bank's count is as last seen. Turn on *Batch plaque* for the same in a slim plaque in the game view; it only informs, and a warning when you stop is left to Codex Guardian's idle rule.
 - **Ticker.** An optional slim plaque in the game view with the session's clock, experience and loot.
 
 <p align="center">
@@ -42,6 +43,11 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
   <img src="docs/screenshots/lap-plaque.png" width="260" alt="The lap plaque">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/bench.png" width="225" alt="The batch under way on the Session tab">
+  <img src="docs/screenshots/bench-plaque.png" width="250" alt="The batch plaque">
+</p>
+
 ## Settings that matter
 
 | Setting | What it does |
@@ -54,6 +60,8 @@ It is part of the **Codex** suite and shares its look: warm ink, aged gold and t
 | Ghost plaque | The same race in a slim plaque in the game view. Off by default. |
 | Rooftop coach | Times rooftop laps, races your best lap, counts marks of grace toward Graceful and compares courses on the Agility tab. On by default. |
 | Lap plaque | The lap under way and its gap to your best lap in a slim plaque in the game view. Off by default. |
+| Batch progress | The batch under way and how long your supplies last at your own pace, on the Session tab. On by default. |
+| Batch plaque | The same in a slim plaque in the game view. Off by default. |
 | Recap last session, Goal reached in chat | Lines in the chat box when a new session begins and when the session's goal is reached. |
 | Name on cards | Writes your character's name on the cards and their text. On by default. |
 | Worth on cards | Shows how your net worth moved, by Codex Ledger, on the week card. Off by default. |
@@ -70,7 +78,7 @@ A session begins when you log in. World hops never end it, and logging out and b
 
 ## Rules posture
 
-Session Chronicle only reads what the game already shows you: your experience, loot events, the game's own chat messages and the items in your bank, inventory and worn equipment. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
+Session Chronicle only reads what the game already shows you: your experience, loot events, the game's own chat messages and the items in your bank, inventory and worn equipment. The batch tracker reads your pack and never clicks or repeats an action for you. It does not click, change menus or send anything over the network. A card is only written when you press Save and pick where it goes.
 
 ## Development
 
