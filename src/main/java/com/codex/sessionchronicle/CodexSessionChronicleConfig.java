@@ -172,4 +172,30 @@ public interface CodexSessionChronicleConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+		keyName = "benchProgress",
+		name = "Batch progress",
+		description = "While you fletch, smith, cook, mix potions or craft in batches, show on the Session tab how many more the pack holds, "
+			+ "the time left at your own pace, and how long your pack and bank supplies last",
+		position = 10,
+		section = display
+	)
+	default boolean benchProgress()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "benchPlaque",
+		name = "Batch plaque",
+		description = "A slim plaque in the game view with the batch under way: how many are left and the time left at your own pace. "
+			+ "It sends no alerts; Codex Guardian's idle rule does that",
+		position = 11,
+		section = display
+	)
+	default boolean benchPlaque()
+	{
+		return false;
+	}
 }

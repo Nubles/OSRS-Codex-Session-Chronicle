@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle.ui;
 
+import com.codex.sessionchronicle.core.Bench;
 import com.codex.sessionchronicle.core.Ghost;
 import com.codex.sessionchronicle.core.Goal;
 import com.codex.sessionchronicle.core.Moment;
@@ -38,7 +39,7 @@ final class SessionView
 	 */
 	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end)
 	{
-		return build(s, items, icons, backToLive, remove, end, null, null, null);
+		return build(s, items, icons, backToLive, remove, end, null, null, null, null);
 	}
 
 	/**
@@ -48,6 +49,15 @@ final class SessionView
 	 */
 	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end,
 		Segmented goalKinds, BiConsumer<Goal.Kind, Long> setGoal, Runnable clearGoal)
+	{
+		return build(s, items, icons, backToLive, remove, end, goalKinds, setGoal, clearGoal, null);
+	}
+
+	/**
+	 * @param bench the make-X batch under way, or the load just finished; null for none or an older session
+	 */
+	static JComponent build(Summary s, ItemIcons items, Icons icons, Runnable backToLive, Runnable remove, Runnable end,
+		Segmented goalKinds, BiConsumer<Goal.Kind, Long> setGoal, Runnable clearGoal, Bench.Progress bench)
 	{
 		StackPanel stack = new StackPanel(8, 8);
 		if (backToLive != null)
@@ -103,6 +113,13 @@ final class SessionView
 		tiles.add(new StatTile(Format.count(s.getKills()), "Kills", killLines.isEmpty() ? "none this time" : killLines.get(0).getName(),
 			s.getKills() > 0 ? Theme.KILLS : Theme.TEXT_MUTED));
 		stack.add(tiles);
+
+		if (bench != null)
+		{
+			// The batch under way is the most pressing thing on the tab while it runs, so it sits right under the totals.
+			stack.add(new SectionHeader("At the bench", BenchRow.trailing(bench)));
+			stack.add(new BenchRow(bench, items));
+		}
 
 		JComponent worth = worth(s);
 		if (worth != null)

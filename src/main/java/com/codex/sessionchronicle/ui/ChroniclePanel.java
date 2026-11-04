@@ -1,6 +1,7 @@
 package com.codex.sessionchronicle.ui;
 
 import com.codex.sessionchronicle.core.AgilityCoach;
+import com.codex.sessionchronicle.core.Bench;
 import com.codex.sessionchronicle.core.Journal;
 import com.codex.sessionchronicle.core.Pace;
 import com.codex.sessionchronicle.core.Summary;
@@ -52,6 +53,8 @@ public class ChroniclePanel extends PluginPanel
 	private boolean agilityStale = true;
 
 	private Summary live;
+	/** The make-X batch under way, shown on the live Session tab; null for none. */
+	private Bench.Progress bench;
 	private List<Summary> past = Collections.emptyList();
 	private Journal.Records records;
 	private Week week;
@@ -207,7 +210,7 @@ public class ChroniclePanel extends PluginPanel
 	private void rebuildSession(boolean force)
 	{
 		Summary s = shown();
-		String drawn = (open >= 0 ? "past:" : "live:") + Summary.signature(s);
+		String drawn = (open >= 0 ? "past:" : "live:" + (bench == null ? "-" : bench.key()) + ":") + Summary.signature(s);
 		if (!force && drawn.equals(sessionDrawn))
 		{
 			return;
@@ -215,7 +218,20 @@ public class ChroniclePanel extends PluginPanel
 		sessionDrawn = drawn;
 		replace(session, open >= 0 ? SessionView.build(s, items, icons, this::backToLive, this::removeOpen, null)
 			: SessionView.build(s, items, icons, null, null, sessionActions::endSession, goalKinds, sessionActions::setGoal,
-				sessionActions::clearGoal));
+				sessionActions::clearGoal, bench));
+	}
+
+	/**
+	 * The make-X batch under way, sent on the Swing thread with each refresh of the session. It is drawn
+	 * on the live Session tab, and only when what it shows has moved.
+	 */
+	public void updateBench(Bench.Progress bench)
+	{
+		this.bench = bench;
+		if (isShowing() && open < 0 && tab == 0)
+		{
+			rebuildSession(false);
+		}
 	}
 
 	private void removeOpen()
