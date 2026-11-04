@@ -38,11 +38,18 @@ public final class AgilityView
 	public static JComponent build(AgilityCoach coach, ItemIcons items)
 	{
 		StackPanel stack = new StackPanel(8, 8);
+		addTo(stack, coach, items);
+		return stack;
+	}
+
+	/** Adds the rooftop coach's sections to a stack. */
+	public static void addTo(StackPanel stack, AgilityCoach coach, ItemIcons items)
+	{
 		if (coach == null)
 		{
 			stack.add(SessionView.note("Rooftop coach", "Log in and run a rooftop course: every lap is timed, your best lap becomes a ghost to race, "
 				+ "and your marks of grace are counted toward a Graceful outfit."));
-			return stack;
+			return;
 		}
 		LapClock.Split split = coach.getSplit();
 		if (split != null)
@@ -80,7 +87,6 @@ public final class AgilityView
 				+ "then a set chance each lap, 80% lower 20 levels over the course (not at Canifis). Graceful counts pieces and marks seen in "
 				+ "your bank, worn or carried" + (coach.isBankSeen() ? "." : "; open your bank once so the ones in it count."),
 			Theme.small(), Theme.TEXT_FAINT, SessionView.WIDTH - 10));
-		return stack;
 	}
 
 	/** Green ahead, ember behind, gold level or unknown. */

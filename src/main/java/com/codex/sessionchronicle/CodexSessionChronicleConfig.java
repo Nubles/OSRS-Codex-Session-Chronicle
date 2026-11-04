@@ -1,5 +1,6 @@
 package com.codex.sessionchronicle;
 
+import com.codex.sessionchronicle.core.Underwater;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -195,6 +196,43 @@ public interface CodexSessionChronicleConfig extends Config
 		section = display
 	)
 	default boolean benchPlaque()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "underwaterLog",
+		name = "Underwater log",
+		description = "Log each dive at Fossil Island's Underwater Agility and Thieving on the Agility tab: tears an hour, clams and chests "
+			+ "searched, experience an hour at your own pace and the time to the reward you are saving for. Nothing is highlighted",
+		position = 12,
+		section = display
+	)
+	default boolean underwaterLog()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "underwaterGoal",
+		name = "Saving tears for",
+		description = "The reward from Mairin's Market you are saving mermaid's tears for, with its price in tears",
+		position = 13,
+		section = display
+	)
+	default Underwater.Reward underwaterGoal()
+	{
+		return Underwater.Reward.MERFOLK_TRIDENT;
+	}
+
+	@ConfigItem(
+		keyName = "divePlaque",
+		name = "Dive plaque",
+		description = "A slim plaque in the game view while you dive: tears this dive, your pace an hour and the time to your reward",
+		position = 14,
+		section = display
+	)
+	default boolean divePlaque()
 	{
 		return false;
 	}
