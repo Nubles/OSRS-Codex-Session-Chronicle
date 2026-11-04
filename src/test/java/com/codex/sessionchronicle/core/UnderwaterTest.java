@@ -354,6 +354,53 @@ public class UnderwaterTest
 		assertEquals(400 - 43, c.tearsNeeded());
 	}
 
+	@Test
+	public void searchesCountedMatchTheTearsOnARealisticDive()
+	{
+		// Fifteen minutes of attempts every four ticks. The wiki: only a successful search pays ("A successful
+		// search also rewards 4.5 Agility and Thieving experience"), at about 12% to 16% by Thieving level,
+		// with one of each tear; the dive's first object gives no tears. A failed attempt gives nothing and
+		// must not be counted, so the searches counted are the tears found plus that first object.
+		java.util.Random r = new java.util.Random(5);
+		DiveWatch w = new DiveWatch();
+		int m = 0;
+		int g = 0;
+		int a = 3_000_000;
+		int th = 4_000_000;
+		int attempts = 0;
+		w.tick(0, T0, under(m, g, a, th));
+		for (int tick = 1; tick <= 1500; tick++)
+		{
+			if (tick % 4 == 0)
+			{
+				attempts++;
+				w.clicked(attempts % 3 == 0 ? Underwater.Spot.CHEST : Underwater.Spot.CLAM, tick);
+				boolean first = attempts == 1;
+				if (first || r.nextDouble() < 0.14)
+				{
+					int xp = r.nextBoolean() ? 4 : 5;
+					a += xp;
+					th += xp;
+					if (!first)
+					{
+						m++;
+						g++;
+					}
+				}
+			}
+			w.tick(tick, T0, under(m, g, a, th));
+		}
+		UnderwaterLog.Dive d = w.current();
+		assertEquals(375, attempts);
+		assertEquals(m, d.getTears());
+		assertEquals(d.getTears() + 1, d.getSearches());
+		assertEquals(d.getSearches(), d.getClams() + d.getChests());
+		assertEquals(0, d.getOthers());
+		assertTrue("far fewer searches than attempts", d.getSearches() < attempts / 4);
+		// About 14% of 375 attempts in 15 minutes: within the wiki's 170-230 tears an hour.
+		assertTrue(d.tearsPerHour() > 170 && d.tearsPerHour() < 260);
+	}
+
 	private static UnderwaterLog.Dive dive(long ticks, long tears)
 	{
 		UnderwaterLog.Dive d = new UnderwaterLog.Dive(T0);

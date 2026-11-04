@@ -89,8 +89,9 @@ public final class UnderwaterView
 			this.u = u;
 			setOpaque(false);
 			setPreferredSize(new Dimension(10, HEIGHT));
-			setToolTipText("<html>A dive runs from its first tear or search to its last.<br>A search is told a clam or a chest "
-				+ "by what you clicked; Thieving experience is how a search is seen.</html>");
+			setToolTipText("<html>A dive runs from its first tear or search to its last.<br>Clams and chests count successful searches, "
+				+ "the ones that give Thieving experience; a failed search gives nothing and is not counted.<br>"
+				+ "A search is told a clam or a chest by what you clicked.</html>");
 		}
 
 		@Override
