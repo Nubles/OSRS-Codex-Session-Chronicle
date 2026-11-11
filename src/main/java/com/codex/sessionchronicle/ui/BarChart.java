@@ -141,12 +141,14 @@ class BarChart extends JComponent
 			if (bh > 0)
 			{
 				RoundRectangle2D shape = new RoundRectangle2D.Float(x, h - bh, bw, bh + 3, 4, 4);
-				g.setClip(0, 0, w, h);
+				// Clipped to the chart, then the clip it had is put back: never cleared.
+				java.awt.Shape old = g.getClip();
+				g.clip(new java.awt.Rectangle(0, 0, w, h));
 				g.setPaint(new GradientPaint(0, h - bh, c, 0, h, Theme.mix(c, Theme.INK, 0.55)));
 				g.fill(shape);
 				g.setColor(Theme.alpha(java.awt.Color.WHITE, 50));
 				g.drawLine(Math.round(x + 1), Math.round(h - bh + 1), Math.round(x + bw - 2), Math.round(h - bh + 1));
-				g.setClip(null);
+				g.setClip(old);
 			}
 			if (bars.size() <= 14 || i % 2 == bars.size() % 2)
 			{
