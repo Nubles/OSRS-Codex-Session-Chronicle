@@ -56,6 +56,20 @@ public class GhostPlaque extends Overlay
 		{
 			return null;
 		}
+		// Drawn on a copy, so the renderer's clip, font, hints and paint are never changed.
+		Graphics2D copy = (Graphics2D) g.create();
+		try
+		{
+			return draw(copy, gh);
+		}
+		finally
+		{
+			copy.dispose();
+		}
+	}
+
+	private static Dimension draw(Graphics2D g, Ghost gh)
+	{
 		Theme.smooth(g);
 		FontMetrics bold = g.getFontMetrics(Theme.title());
 		FontMetrics small = g.getFontMetrics(Theme.small());

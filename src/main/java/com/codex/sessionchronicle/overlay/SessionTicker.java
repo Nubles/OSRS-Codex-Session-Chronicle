@@ -92,6 +92,20 @@ public class SessionTicker extends Overlay
 		{
 			return null;
 		}
+		// Drawn on a copy, so the renderer's clip, font, hints and paint are never changed.
+		Graphics2D copy = (Graphics2D) g.create();
+		try
+		{
+			return draw(copy, v);
+		}
+		finally
+		{
+			copy.dispose();
+		}
+	}
+
+	private Dimension draw(Graphics2D g, View v)
+	{
 		Theme.smooth(g);
 		long played = v.playedMs + (v.live ? Math.max(0, Math.min(5_000, System.currentTimeMillis() - v.at)) : 0);
 		if (v != laidView || played / 1000 != laidSecond)

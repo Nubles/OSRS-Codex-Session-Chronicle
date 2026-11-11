@@ -54,7 +54,20 @@ public class BenchPlaque extends Overlay
 	public Dimension render(Graphics2D g)
 	{
 		Bench.Progress p = shown();
-		return p == null ? null : draw(g, p);
+		if (p == null)
+		{
+			return null;
+		}
+		// Drawn on a copy, so the renderer's clip, font, hints and paint are never changed.
+		Graphics2D copy = (Graphics2D) g.create();
+		try
+		{
+			return draw(copy, p);
+		}
+		finally
+		{
+			copy.dispose();
+		}
 	}
 
 	/** Draws the plaque at the origin; the screenshot test uses the same drawing. */

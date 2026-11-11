@@ -56,7 +56,20 @@ public class DivePlaque extends Overlay
 	public Dimension render(Graphics2D g)
 	{
 		UnderwaterCoach c = shown();
-		return c == null ? null : draw(g, c);
+		if (c == null)
+		{
+			return null;
+		}
+		// Drawn on a copy, so the renderer's clip, font, hints and paint are never changed.
+		Graphics2D copy = (Graphics2D) g.create();
+		try
+		{
+			return draw(copy, c);
+		}
+		finally
+		{
+			copy.dispose();
+		}
 	}
 
 	/** Draws the plaque at the origin; the screenshot test uses the same drawing. */

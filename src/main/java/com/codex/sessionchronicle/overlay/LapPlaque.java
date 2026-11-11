@@ -55,7 +55,16 @@ public class LapPlaque extends Overlay
 		{
 			return null;
 		}
-		return draw(g, s);
+		// Drawn on a copy, so the renderer's clip, font, hints and paint are never changed.
+		Graphics2D copy = (Graphics2D) g.create();
+		try
+		{
+			return draw(copy, s);
+		}
+		finally
+		{
+			copy.dispose();
+		}
 	}
 
 	/** Draws the plaque at the origin; the screenshot test uses the same drawing. */
